@@ -14,7 +14,9 @@ const USAGE = `demo-agents: a support agent and a dispute agent that really tran
   --pace MS                       pause between steps for screen recording (default 500; --fast = 0)
   --only support|dispute|all      default all
   --max-disputes N                handle at most N disputes
-  --no-killswitch                 skip the kill switch step
+  --no-killswitch                 skip the kill switch step (same as --killswitch off)
+  --killswitch auto|manual|off    auto: the runner presses it. manual: you press it in the dashboard (the run waits with --gate)
+  --gate                          pause at named stages until a line "go" is read on stdin (for scripts/record-demo.mjs)
   --keep-open                     keep the proxy and dashboard running afterwards (Ctrl+C to stop)
   --port N / --host H             where the demo proxy listens (default 127.0.0.1:8787)
   --url U --manifest FILE         use a running proxy and real sandbox orders. Env: PAYLEASH_OWNER_TOKEN, PAYLEASH_MANDATE (support), PAYLEASH_MANDATE_DISPUTE
@@ -32,6 +34,8 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env,
       only: { type: "string", default: "all" },
       "max-disputes": { type: "string" },
       "no-killswitch": { type: "boolean", default: false },
+      killswitch: { type: "string" },
+      gate: { type: "boolean", default: false },
       "keep-open": { type: "boolean", default: false },
       port: { type: "string" },
       host: { type: "string" },
@@ -45,6 +49,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env,
   if (values.help) return out(USAGE), 0;
   if (!["auto", "dashboard", "skip"].includes(values.approve!)) throw new Error("--approve must be auto, dashboard or skip");
   if (!["support", "dispute", "all"].includes(values.only!)) throw new Error("--only must be support, dispute or all");
+  if (values.killswitch && !["auto", "manual", "off"].includes(values.killswitch)) throw new Error("--killswitch must be auto, manual or off");
   const report = await runScenario({
     url: values.url,
     manifest: values.manifest,
@@ -55,7 +60,8 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env,
     paceMs: values.fast ? 0 : values.pace !== undefined ? Number(values.pace) : 500,
     only: values.only as "support" | "dispute" | "all",
     maxDisputes: values["max-disputes"] ? Number(values["max-disputes"]) : undefined,
-    killSwitch: !values["no-killswitch"],
+    killSwitch: values["no-killswitch"] ? "off" : ((values.killswitch ?? "auto") as "auto" | "manual" | "off"),
+    gate: values.gate,
     keepOpen: values["keep-open"],
     inbox: values.inbox ? resolve(values.inbox) : undefined,
     outDir: values.out ? resolve(values.out) : undefined,

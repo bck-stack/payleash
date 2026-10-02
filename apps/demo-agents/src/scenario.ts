@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { createInterface } from "node:readline";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -45,7 +46,10 @@ export interface ScenarioOptions {
   inbox?: string;
   outDir?: string;
   keepOpen?: boolean;
-  killSwitch?: boolean;
+  /** auto (default): the runner presses the kill switch through the owner API. manual: a person (or the recording script) presses it in the dashboard. off: skip. */
+  killSwitch?: boolean | "auto" | "manual" | "off";
+  /** Pause at named stages (`GATE <name>` on stdout) until a line "go" arrives on stdin. Used by scripts/record-demo.mjs. */
+  gate?: boolean;
   only?: "support" | "dispute" | "all";
   maxDisputes?: number;
   dashboardDir?: string;
@@ -116,6 +120,21 @@ export async function runScenario(o: ScenarioOptions): Promise<ScenarioReport> {
     log("result", `${pass ? "PASS" : "FAIL"}  ${name}: ${detail}`);
   };
   const outDir = o.outDir ?? resolve(APP_DIR, "out");
+  const killMode = o.killSwitch === false || o.killSwitch === "off" ? "off" : o.killSwitch === "manual" ? "manual" : "auto";
+
+  // Gates: the run stops at named stages until stdin says "go". Nothing changes when --gate is not set.
+  const stdinLines: string[] = [];
+  let waiter: ((line: string) => void) | undefined;
+  const rl = o.gate ? createInterface({ input: process.stdin }) : undefined;
+  rl?.on("line", (line) => (waiter ? ((w) => ((waiter = undefined), w(line)))(waiter) : stdinLines.push(line)));
+  const gate = async (name: string): Promise<void> => {
+    if (!o.gate) return;
+    (o.out ?? ((s: string) => console.log(s)))(`GATE ${name}`);
+    for (;;) {
+      const line = stdinLines.length ? stdinLines.shift()! : await new Promise<string>((res) => (waiter = res));
+      if (line.trim() === "go") return;
+    }
+  };
   const only = o.only ?? "all";
 
   // ---- the model, if any ------------------------------------------------------------------------------
@@ -161,6 +180,7 @@ export async function runScenario(o: ScenarioOptions): Promise<ScenarioReport> {
     disputeMandate = await sign(DISPUTE_MANDATE);
     log("proxy", `PayLeash proxy and dashboard are up at ${url}  (PayPal is simulated: nothing can leave this machine)`);
     log("proxy", `dashboard sign-in token (this run only): ${ownerToken}`);
+    if (o.gate) (o.out ?? ((s: string) => console.log(s)))(`READY ${url} ${ownerToken}`);
   } else {
     if (!ownerToken || !supportMandate) throw new Error("with --url you must set PAYLEASH_OWNER_TOKEN and PAYLEASH_MANDATE (the support agent's mandate)");
     if (!o.manifest) throw new Error("with --url, pass --manifest <seed manifest.json> so the inbox orders map to real sandbox orders (run `pnpm seed` first)");
@@ -203,6 +223,8 @@ export async function runScenario(o: ScenarioOptions): Promise<ScenarioReport> {
   let followUps: { approvalId: string; status: string }[] = [];
 
   try {
+    await gate("ready");
+
     // ---- 1. the support / refund agent ----------------------------------------------------------------------
     if (only !== "dispute") {
       const inbox = readInbox(o.inbox ?? resolve(APP_DIR, "inbox"));
@@ -234,11 +256,16 @@ export async function runScenario(o: ScenarioOptions): Promise<ScenarioReport> {
 
     // ---- 3. the kill switch ---------------------------------------------------------------------------------------
     let frozenCode: string | undefined;
-    if (o.killSwitch !== false && supportResults.length) {
+    if (killMode !== "off" && supportResults.length) {
       log.section("Kill switch");
-      await log.beat();
-      log("owner", "🧊 FREEZE: the owner hits the kill switch");
-      await owner.call("POST", "/freeze", { reason: "demo: something looks wrong" });
+      if (killMode === "manual") {
+        log("owner", "🧊 waiting for the owner to press the kill switch in the dashboard…");
+        await gate("killswitch");
+      } else {
+        await log.beat();
+        log("owner", "🧊 FREEZE: the owner hits the kill switch");
+        await owner.call("POST", "/freeze", { reason: "demo: something looks wrong" });
+      }
       const probe = supportResults.find((r) => r.outcome.kind === "executed");
       if (probe) {
         const shop = book.byNumber(probe.orderNumber ?? "");
@@ -247,13 +274,20 @@ export async function runScenario(o: ScenarioOptions): Promise<ScenarioReport> {
         const codes = (r.body?.reasons ?? []).map((x: { code: string }) => x.code);
         frozenCode = codes[0];
         log("support", `   🛑 DENIED [${codes.join(", ")}]: ${r.body?.explanation ?? ""}`);
+        await log.beat();
       }
-      await owner.call("POST", "/unfreeze", {});
-      log("owner", "☀  unfrozen");
+      if (killMode === "manual") {
+        await gate("killswitch-done");
+        log("owner", "☀  the owner lifted the kill switch");
+      } else {
+        await owner.call("POST", "/unfreeze", {});
+        log("owner", "☀  unfrozen");
+      }
     }
 
     // ---- 4. the audit chain ---------------------------------------------------------------------------------------
     log.section("Audit");
+    await gate("audit");
     const audit = await owner.call("GET", "/audit/verify");
     log("result", `audit hash chain: ${audit.ok ? `VERIFIED ✓  ${audit.entries} entries, head #${audit.headSeq}` : `TAMPERED ✗ ${JSON.stringify(audit.problems).slice(0, 200)}`}`);
 
@@ -277,7 +311,7 @@ export async function runScenario(o: ScenarioOptions): Promise<ScenarioReport> {
         check("disputes: evidence held for the owner, none sent behind its back", disputeResults.length > 0 && disputeResults.every((r) => r.outcome.kind === "held"), disputeResults.map((r) => `${r.disputeId}:${r.outcome.kind}`).join(", "));
         if (o.approve === "auto") check("approved evidence reached PayPal", disputeResults.every((r) => followUps.find((f) => r.outcome.kind === "held" && f.approvalId === r.outcome.approvalId)?.status === "executed"), "all approvals executed");
       }
-      if (o.killSwitch !== false && supportResults.length) check("kill switch denies writes", frozenCode === "frozen_global", String(frozenCode));
+      if (killMode !== "off" && supportResults.length) check("kill switch denies writes", frozenCode === "frozen_global", String(frozenCode));
       check("audit chain verifies", audit.ok === true, `${audit.entries} entries`);
     } else {
       const n = (k: string) => supportResults.filter((r) => r.outcome.kind === k).length;
@@ -297,6 +331,7 @@ export async function runScenario(o: ScenarioOptions): Promise<ScenarioReport> {
     }
     return { mode, agent: agentKind, support: supportResults, disputes: disputeResults, followUps, checks, ok: checks.every((c) => c.pass), dashboardUrl, ownerToken: running ? ownerToken : undefined };
   } finally {
+    rl?.close();
     await support.close();
     await dispute?.close();
     await running?.close();

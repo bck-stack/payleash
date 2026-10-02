@@ -9,7 +9,7 @@ export default tseslint.config(
     // Plain Node scripts (.mjs) and the pages they drive in a browser.
     files: ["**/*.mjs"],
     languageOptions: {
-      globals: Object.fromEntries(["process", "console", "fetch", "setTimeout", "clearTimeout", "AbortSignal", "URL", "Buffer", "document", "window", "performance"].map((g) => [g, "readonly"])),
+      globals: Object.fromEntries(["process", "console", "fetch", "setTimeout", "clearTimeout", "AbortSignal", "URL", "Buffer", "document", "window", "performance", "requestAnimationFrame", "setInterval", "clearInterval", "location"].map((g) => [g, "readonly"])),
     },
   },
   {
