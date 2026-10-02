@@ -20,7 +20,7 @@ const refund = (capture_id: string, value?: string, payee?: string) => ({
  * real guard against the recorded PayPal fixtures (one runs, three are held, two are denied). Safe to call again: it
  * resets the fixtures and the daily budgets first, and an identical still-pending call is not queued twice.
  */
-export async function seedDemo(rt: ProxyRuntime): Promise<void> {
+export async function seedDemo(rt: ProxyRuntime, o: { activity?: boolean } = {}): Promise<void> {
   const fx = rt.fixtureExecutor;
   const ownerKey = rt.ownerPrivateKey;
   if (!fx || !ownerKey) throw new Error("demo seeding needs fixtures and the throw-away owner key");
@@ -31,6 +31,7 @@ export async function seedDemo(rt: ProxyRuntime): Promise<void> {
   for (const k of Object.keys(fx.responses)) delete fx.responses[k];
   Object.assign(fx.responses, fresh);
   rt.db.prepare("DELETE FROM spend_ledger").run();
+  if (o.activity === false) return;
 
   // 2. Mandates, signed with the throw-away key and recorded for the dashboard.
   const sign = async (input: MandateInput) => {

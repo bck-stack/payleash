@@ -31,6 +31,7 @@ import type { ProxyOptions } from "./config.js";
 import { FixtureExecutor } from "./fixture-executor.js";
 import { ToolkitExecutor, type ToolExecutor } from "./executor.js";
 import { loadToolkitTools, type ToolkitTool } from "./toolkit.js";
+import { NATIVE_TOOLS } from "./native-tools.js";
 import { Notifier, emailConfigFromEnv } from "./notify.js";
 import { SessionManager } from "./sessions.js";
 import { seedDemo } from "./demo.js";
@@ -73,7 +74,7 @@ export interface ProxyRuntime {
   now: () => Date;
   env: NodeJS.ProcessEnv;
   /** Only in `--demo`: rebuild the seeded scenario (fixtures, budgets, held calls). */
-  demo?: { reseed(): Promise<void> };
+  demo?: { reseed(o?: { activity?: boolean }): Promise<void> };
   close(): void;
 }
 
@@ -196,7 +197,8 @@ export function buildProxy(opts: ProxyOptions, env: NodeJS.ProcessEnv = process.
     onHold: ({ owner }) => void late.rt?.notifier.notifyHeld(owner),
   });
 
-  const { tools, unclassified } = loadToolkitTools();
+  const { tools: toolkitTools, unclassified } = loadToolkitTools();
+  const tools = [...toolkitTools, ...NATIVE_TOOLS];
   if (unclassified.length) log(`WARNING: withholding unclassified toolkit tools (add them to classification.ts): ${unclassified.join(", ")}`);
 
   const rt: ProxyRuntime = {
@@ -229,7 +231,7 @@ export function buildProxy(opts: ProxyOptions, env: NodeJS.ProcessEnv = process.
   late.rt = rt;
   if (demo) {
     if (!fixtureExecutor || !keys.ownerPrivate) throw new Error("--demo needs the fixture executor and a throw-away owner key");
-    rt.demo = { reseed: () => seedDemo(rt) };
+    rt.demo = { reseed: (o) => seedDemo(rt, o) };
   }
   return rt;
 }

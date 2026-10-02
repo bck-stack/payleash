@@ -27,7 +27,7 @@ export async function startProxy(opts: ProxyOptions, env: NodeJS.ProcessEnv = pr
 
   try {
     if (rt.demo) {
-      await rt.demo.reseed();
+      await rt.demo.reseed({ activity: opts.demoActivity !== false });
       log(`DEMO MODE: recorded PayPal, throw-away keys, in-memory database. ${rt.approvals.countPending()} held calls are waiting in the dashboard.${rt.demoToken ? " A read-only demo login is enabled (PAYLEASH_DEMO_TOKEN)." : ""}`);
     }
     if (opts.transport === "http") {

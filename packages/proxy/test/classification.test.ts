@@ -1,5 +1,6 @@
 import { TOOL_DESCRIPTORS } from "@payleash/core";
 import { describe, expect, it } from "vitest";
+import { NATIVE_CLASSIFICATION } from "../src/native-tools.js";
 import { TOOL_CLASSIFICATION, allToolkitToolNames, loadToolkitTools } from "../src/index.js";
 
 describe("toolkit tool classification", () => {
@@ -22,7 +23,7 @@ describe("toolkit tool classification", () => {
   });
 
   it("every write tool has critical-argument rules in core, and nothing else does", () => {
-    const writes = Object.entries(TOOL_CLASSIFICATION).filter(([, a]) => a === "write").map(([t]) => t).sort();
+    const writes = Object.entries({ ...TOOL_CLASSIFICATION, ...NATIVE_CLASSIFICATION }).filter(([, a]) => a === "write").map(([t]) => t).sort();
     expect(Object.keys(TOOL_DESCRIPTORS).sort()).toEqual(writes);
   });
 

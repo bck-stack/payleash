@@ -26,8 +26,14 @@ export class FixtureExecutor implements ToolExecutor {
         return JSON.stringify(r[`/v2/invoicing/invoices/${args.invoice_id}`] ?? notFound("invoice"));
       case "show_subscription_details":
         return JSON.stringify(r[`/v1/billing/subscriptions/${args.subscription_id}`] ?? notFound("subscription"));
-      case "list_disputes":
-        return JSON.stringify({ items: [{ dispute_id: DEMO_IDS.dispute, status: "WAITING_FOR_SELLER_RESPONSE", dispute_amount: { currency_code: "USD", value: "42.00" } }] });
+      case "list_disputes": {
+        const items = Object.entries(r)
+          .filter(([path]) => path.startsWith("/v1/customer/disputes/"))
+          .map(([, d]) => d as Json)
+          .filter((d) => d.status === "WAITING_FOR_SELLER_RESPONSE" || d.status === "OPEN")
+          .map((d) => ({ dispute_id: d.dispute_id, status: d.status, reason: d.reason, dispute_amount: d.dispute_amount, create_time: d.create_time }));
+        return JSON.stringify({ items });
+      }
       case "list_transactions": {
         const items = Object.entries(r)
           .filter(([path]) => path.startsWith("/v2/payments/captures/"))
@@ -36,6 +42,15 @@ export class FixtureExecutor implements ToolExecutor {
       }
       case "create_refund":
         return JSON.stringify(this.refund(args));
+      case "get_shipment_tracking":
+        return JSON.stringify(r[`/v1/shipping/trackers/${args.transaction_id}`] ?? notFound("tracker"));
+      case "provide_dispute_evidence": {
+        const d = r[`/v1/customer/disputes/${args.dispute_id}`] as Json | undefined;
+        if (!d) return JSON.stringify(notFound("dispute"));
+        d.evidences = [...(d.evidences ?? []), ...((args.evidences as Json[] | undefined) ?? [])];
+        d.status = "UNDER_REVIEW";
+        return JSON.stringify({ links: [{ href: `https://api.sandbox.paypal.com/v1/customer/disputes/${args.dispute_id}`, rel: "self", method: "GET" }] });
+      }
       case "cancel_subscription": {
         const s = r[`/v1/billing/subscriptions/${args.subscription_id}`] as Json | undefined;
         if (!s) return JSON.stringify(notFound("subscription"));
