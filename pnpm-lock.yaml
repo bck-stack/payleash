@@ -61,6 +61,12 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
 
+  scripts/seed-sandbox:
+    dependencies:
+      '@payleash/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
 packages:
 
   '@ai-sdk/provider-utils@2.2.8':

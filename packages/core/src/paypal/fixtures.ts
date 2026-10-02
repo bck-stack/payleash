@@ -31,20 +31,23 @@ const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, "Z");
 const daysAgo = (now: Date, d: number) => new Date(now.getTime() - d * 86_400_000);
 const API = "https://api.sandbox.paypal.com";
 
-interface Spec {
+/** One captured order as raw PayPal responses (order + capture + refunds). */
+export interface OrderFixtureSpec {
   orderId: string;
   captureId: string;
   buyer: string;
   total: string;
-  ageDays: number;
+  /** ISO timestamp of the capture. */
+  createdAt: string;
   refunds?: { id: string; value: string }[];
   captureStatus?: string;
   items?: { name: string; unit: string; qty: number }[];
   shipping?: string;
 }
 
-function orderAndCapture(now: Date, s: Spec): FixtureResponses {
-  const created = iso(daysAgo(now, s.ageDays));
+/** Raw `/v2/payments/captures/:id` and `/v2/checkout/orders/:id` responses for one order spec. */
+export function orderFixtures(s: OrderFixtureSpec): FixtureResponses {
+  const created = s.createdAt;
   const refundedTotal = (s.refunds ?? []).reduce((a, r) => a + Number(r.value), 0);
   const status = s.captureStatus ?? (refundedTotal === 0 ? "COMPLETED" : refundedTotal >= Number(s.total) ? "REFUNDED" : "PARTIALLY_REFUNDED");
   const capture = {
@@ -103,21 +106,27 @@ function orderAndCapture(now: Date, s: Spec): FixtureResponses {
   };
 }
 
+
+/** Expands many order specs (for example the 90-day backtest history) into one raw-response map. */
+export function expandOrderFixtures(specs: OrderFixtureSpec[]): FixtureResponses {
+  return Object.assign({}, ...specs.map(orderFixtures));
+}
+
 export function buildDemoFixtures(now: Date = new Date()): FixtureResponses {
   const I = DEMO_IDS;
   return {
-    ...orderAndCapture(now, {
+    ...orderFixtures({
       orderId: I.order42,
       captureId: I.capture42,
       buyer: "alice@example.com",
       total: "42.00",
-      ageDays: 10,
+      createdAt: iso(daysAgo(now, 10)),
       items: [{ name: "Handmade mug", unit: "20.00", qty: 2 }],
       shipping: "2.00",
     }),
-    ...orderAndCapture(now, { orderId: I.order100, captureId: I.capture100, buyer: "bob@example.com", total: "100.00", ageDays: 20, refunds: [{ id: "9RF11111AA222222B", value: "30.00" }] }),
-    ...orderAndCapture(now, { orderId: I.orderOld, captureId: I.captureOld, buyer: "alice@example.com", total: "20.00", ageDays: 120 }),
-    ...orderAndCapture(now, { orderId: I.orderRefunded, captureId: I.captureRefunded, buyer: "carol@example.com", total: "15.00", ageDays: 30, refunds: [{ id: "5RF33333CC444444D", value: "15.00" }] }),
+    ...orderFixtures({ orderId: I.order100, captureId: I.capture100, buyer: "bob@example.com", total: "100.00", createdAt: iso(daysAgo(now, 20)), refunds: [{ id: "9RF11111AA222222B", value: "30.00" }] }),
+    ...orderFixtures({ orderId: I.orderOld, captureId: I.captureOld, buyer: "alice@example.com", total: "20.00", createdAt: iso(daysAgo(now, 120)) }),
+    ...orderFixtures({ orderId: I.orderRefunded, captureId: I.captureRefunded, buyer: "carol@example.com", total: "15.00", createdAt: iso(daysAgo(now, 30)), refunds: [{ id: "5RF33333CC444444D", value: "15.00" }] }),
     [`/v1/customer/disputes/${I.dispute}`]: {
       dispute_id: I.dispute,
       create_time: iso(daysAgo(now, 3)),
