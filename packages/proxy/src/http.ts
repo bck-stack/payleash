@@ -70,6 +70,30 @@ export async function startHttp(rt: ProxyRuntime, o: HttpOptions): Promise<Runni
   const api = createOwnerApi(rt);
   const sessions = new Map<string, { transport: StreamableHTTPServerTransport; mandateToken: string }>();
 
+  const startedAtMs = Date.now();
+  /** Cheap and public: no secrets, no PayPal call. Render's health check and the uptime script read it. */
+  const health = (): [number, Record<string, unknown>] => {
+    try {
+      const audit = rt.db.prepare("SELECT COUNT(*) AS n FROM audit_log").get() as { n: number };
+      return [
+        200,
+        {
+          ok: true,
+          mode: rt.mode,
+          demo: !!rt.demo,
+          tools: rt.tools.length,
+          uptimeSeconds: Math.floor((Date.now() - startedAtMs) / 1000),
+          now: rt.now().toISOString(),
+          audit: { entries: audit.n },
+          pending: rt.approvals.countPending(),
+          ...(rt.demoStatus ? { reset: { last: rt.demoStatus.lastResetAt, next: rt.demoStatus.nextResetAt, count: rt.demoStatus.resets } } : {}),
+        },
+      ];
+    } catch {
+      return [503, { ok: false, error: "database unavailable" }];
+    }
+  };
+
   const ownerOnly = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (!rt.ownerToken) {
       send(res, 503, { error: "owner API is disabled: set PAYLEASH_OWNER_TOKEN" });
@@ -120,7 +144,7 @@ export async function startHttp(rt: ProxyRuntime, o: HttpOptions): Promise<Runni
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
-    if (path === "/healthz" && req.method === "GET") return send(res, 200, { ok: true, mode: rt.mode, tools: rt.tools.length });
+    if ((path === "/healthz" || path === "/api/health") && req.method === "GET") return send(res, ...health());
     if (path === "/mcp" && o.mcp) return handleMcp(req, res);
     if (await api.handle(req, res, url, path)) return;
     // A browser opening /approvals (a link from a notification, a reload) wants the page, not the owner API's JSON of the same name.

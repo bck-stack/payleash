@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorText } from "./api";
+import { toast } from "./components/feedback";
 
 export function useInterval(fn: () => void, ms: number | null): void {
   const saved = useRef(fn);
@@ -34,6 +35,8 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[] = [], pollMs:
   const loadRef = useRef(load);
   loadRef.current = load;
   const alive = useRef(true);
+  const hadData = useRef(false);
+  const told = useRef(false);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -47,11 +50,18 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[] = [], pollMs:
         setData(d);
         setError(null);
         setLoading(false);
+        hadData.current = true;
+        told.current = false;
       },
       (e) => {
         if (!alive.current) return;
         setError(errorText(e));
         setLoading(false);
+        // A failed refresh keeps the last good data on screen; say so once, not on every poll.
+        if (hadData.current && !told.current) {
+          told.current = true;
+          toast.error("Could not refresh. Showing the last data we have; will keep trying.");
+        }
       },
     );
   }, []);

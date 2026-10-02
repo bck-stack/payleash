@@ -99,6 +99,8 @@ export const TOOL_DESCRIPTORS: Readonly<Record<string, ToolDescriptor>> = Object
 
   // --- disputes ---------------------------------------------------------
   d("accept_dispute_claim", "dispute", true, (a) => one(a, "dispute_id", "dispute_id")),
+  // PayLeash's own tool (the toolkit has none): answers a dispute with evidence. Amount-bearing so that, like accepting a claim, it needs a human unless the mandate says otherwise.
+  d("provide_dispute_evidence", "dispute", true, (a) => one(a, "dispute_id", "dispute_id")),
 
   // --- invoices ---------------------------------------------------------
   d("create_invoice", "none", true, (a) => [...itemsTotal(a), ...primaryRecipients(a)]),

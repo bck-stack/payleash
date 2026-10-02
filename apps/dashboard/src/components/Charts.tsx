@@ -84,7 +84,7 @@ export function WeeklyDecisions({ timeline }: { timeline: BacktestReport["timeli
           const x = m.l + i * bw + bw * 0.15;
           const label = `Week of ${short(w)}: ${v.allow} ran, ${v.hold} held, ${v.deny} denied`;
           return (
-            <g key={w} tabIndex={0} aria-label={label} {...bind(label)}>
+            <g key={w} role="img" tabIndex={0} aria-label={label} {...bind(label)}>
               {(["allow", "hold", "deny"] as Dec[]).map((k) => {
                 if (!v[k]) return null;
                 const y1 = y(acc + v[k]);
@@ -125,7 +125,7 @@ export function MoneyBars({ money, currency }: { money: BacktestReport["money"][
           const w = Math.max(r.v ? 4 : 0, ((640 - 170 - 170) * r.v) / max);
           const label = `${NAME[r.k]}: ${Number(r.text).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${currency}`;
           return (
-            <g key={r.k} transform={`translate(0 ${i * 46 + 6})`} tabIndex={0} aria-label={label} {...bind(label)}>
+            <g key={r.k} role="img" transform={`translate(0 ${i * 46 + 6})`} tabIndex={0} aria-label={label} {...bind(label)}>
               <text x={0} y={22} style={{ fill: "var(--ink)", fontSize: 13 }}>{NAME[r.k]}</text>
               <rect x={170} y={4} width={w} height={26} rx={4} fill={C[r.k]} />
               <text x={170 + w + 8} y={22} style={{ fill: "var(--ink)", fontSize: 13, fontWeight: 600 }}>{Number(r.text).toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}</text>
@@ -152,7 +152,7 @@ export function RuleBars({ hits }: { hits: BacktestReport["ruleHits"] }) {
           const scale = (640 - 330) / max;
           const label = `${r.title}: fired in ${r.actions} requests (${r.deny} denied, ${r.hold} held)`;
           return (
-            <g key={r.code} transform={`translate(0 ${i * rowH + 4})`} tabIndex={0} aria-label={label} {...bind(label)}>
+            <g key={r.code} role="img" transform={`translate(0 ${i * rowH + 4})`} tabIndex={0} aria-label={label} {...bind(label)}>
               <text x={0} y={17} style={{ fill: "var(--ink)", fontSize: 12.5 }}>{r.title.length > 36 ? `${r.title.slice(0, 35)}…` : r.title}</text>
               <rect x={260} y={3} width={Math.max(r.deny ? 3 : 0, r.deny * scale)} height={20} rx={3} fill={C.deny} className="gap" />
               <rect x={260 + r.deny * scale} y={3} width={Math.max(r.hold ? 3 : 0, r.hold * scale)} height={20} rx={3} fill={C.hold} className="gap" />

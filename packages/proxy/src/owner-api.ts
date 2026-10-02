@@ -26,6 +26,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ApprovalError } from "./app.js";
 import { TOOL_CLASSIFICATION } from "./classification.js";
+import { NATIVE_CLASSIFICATION } from "./native-tools.js";
 import { LoginThrottle, SESSION_COOKIE, clearCookieHeader, cookieHeader, parseCookies, type Role } from "./sessions.js";
 import { SECURITY_HEADERS } from "./static.js";
 import type { ProxyRuntime } from "./runtime.js";
@@ -101,6 +102,7 @@ function argSummary(tool: string, args: Record<string, unknown>): string {
     case "send_invoice_reminder":
       return s(args.invoice_id);
     case "accept_dispute_claim":
+    case "provide_dispute_evidence":
       return s(args.dispute_id);
     case "cancel_subscription":
       return s(args.subscription_id);
@@ -160,7 +162,8 @@ export function createOwnerApi(rt: ProxyRuntime): OwnerApi {
   const throttle = new LoginThrottle();
   const runs = new Map<string, BacktestRun>();
   let liveCache: { at: number; history: History } | undefined;
-  const knownTools = Object.keys(TOOL_CLASSIFICATION);
+  const ALL_CLASSIFIED: Record<string, string> = { ...TOOL_CLASSIFICATION, ...NATIVE_CLASSIFICATION };
+  const knownTools = Object.keys(ALL_CLASSIFIED);
   const trustProxy = rt.env.PAYLEASH_TRUST_PROXY === "1";
   const inFixtureMode = () => rt.mode === "fixtures";
 
@@ -311,6 +314,7 @@ export function createOwnerApi(rt: ProxyRuntime): OwnerApi {
         role,
         mode: rt.mode,
         demo: inFixtureMode(),
+        ...(rt.demoStatus ? { demoReset: { next: rt.demoStatus.nextResetAt } } : {}),
         loginEnabled: !!rt.sessions,
         demoLoginAvailable: !!rt.demoToken,
         // The demo passcode is public by design (it only opens a read-only account on recorded data); the operator opts in to showing it.
@@ -374,7 +378,7 @@ export function createOwnerApi(rt: ProxyRuntime): OwnerApi {
           const known = rt.mandates.current(agentId)!;
           return { agentId, current: mandateToInput(known.mandate), mandateId: known.mandate.id, expiresAt: new Date(known.mandate.expiresAt * 1000).toISOString() };
         }),
-        tools: knownTools.sort().map((tool) => ({ tool, access: TOOL_CLASSIFICATION[tool] })),
+        tools: knownTools.sort().map((tool) => ({ tool, access: ALL_CLASSIFIED[tool] })),
         canSign: role === "owner" && !!rt.ownerPrivateKey,
         llm: { configured: !!rt.chat, provider: rt.chatProvider ?? null },
         example: "Support agent may refund up to $100 per order, at most $300 a day, automatically up to $25; only orders from the last 60 days",
@@ -497,6 +501,7 @@ export function createOwnerApi(rt: ProxyRuntime): OwnerApi {
     const write = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     const tick = () => {
       try {
+        if (rt.audit.head().seq < last) last = 0; // the demo was reset overnight: the sequence starts again
         for (const e of rt.audit.page({ afterSeq: last, limit: 100 })) {
           write("audit", auditRow(e));
           last = e.seq;

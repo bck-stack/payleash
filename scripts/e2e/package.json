@@ -1,0 +1,20 @@
+{
+  "name": "@payleash/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser tests of the dashboard: axe accessibility on every page (light, dark, phone) and the mobile approval flow at 375 px; plus a Lighthouse accessibility run",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "lighthouse": "tsx src/lighthouse.ts",
+    "axe": "tsx src/axe-report.ts"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "lighthouse": "^13.5.0",
+    "playwright-core": "^1.63.0"
+  },
+  "dependencies": {
+    "@payleash/proxy": "workspace:*"
+  }
+}

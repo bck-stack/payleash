@@ -141,6 +141,16 @@ export function buildCallContext(i: DescribeInput): CallContext {
       add("Opened", date(d.createdAt));
       break;
     }
+    case "provide_dispute_evidence:dispute": {
+      const d = (t as Extract<TaintTruth, { kind: "dispute" }>).dispute;
+      const items = Array.isArray(i.args.evidences) ? (i.args.evidences as { evidence_type?: unknown }[]).map((e) => String(e.evidence_type ?? "evidence").toLowerCase().replace(/_/g, " ")) : [];
+      summary = `Send ${items.length || "the"} evidence item${items.length === 1 ? "" : "s"} on dispute ${d.id}${d.amount ? ` (${moneyText(d.amount.minor, d.amount.currency)} at stake)` : ""}${d.buyerEmail ? `, buyer ${d.buyerEmail}` : ""}`;
+      add("Dispute", d.id);
+      add("Status", d.status);
+      add("Opened", date(d.createdAt));
+      if (items.length) add("Evidence", items.join(", "));
+      break;
+    }
     case "send_invoice:invoice":
     case "send_invoice_reminder:invoice":
     case "record_payment_for_invoice:invoice":

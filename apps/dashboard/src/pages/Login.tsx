@@ -22,11 +22,16 @@ export function Login({ me, onDone }: { me: Me; onDone: () => void }) {
   };
 
   return (
-    <div className="login">
+    <main className="login">
       <form className="card" onSubmit={(e) => { e.preventDefault(); void submit(token); }}>
         <div className="row"><span className="brand"><Logo /> PayLeash</span></div>
         <h1>Sign in</h1>
         <p className="ink2 small">The trust layer for AI agents in your PayPal back office. Use your owner token (<code>PAYLEASH_OWNER_TOKEN</code>).</p>
+        {me.demo && (
+          <p className="small ink2" role="note">
+            This is the hosted demo. It runs on free hosting that sleeps when idle, so the first load can take about 30 seconds. PayPal is a recording and the data resets every night{me.demoReset?.next ? " (03:00 UTC)" : ""}.
+          </p>
+        )}
         {!me.loginEnabled && <div className="warnbox">Login is disabled on this server: set <code>PAYLEASH_OWNER_TOKEN</code>.</div>}
         <label>
           Owner token
@@ -46,6 +51,6 @@ export function Login({ me, onDone }: { me: Me; onDone: () => void }) {
           </div>
         )}
       </form>
-    </div>
+    </main>
   );
 }

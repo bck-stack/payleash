@@ -9,6 +9,8 @@ export interface ProxyOptions {
   allowLive: boolean;
   /** Public demo: recorded PayPal, throw-away keys and database, seeded activity, a read-only judge login. Implies `fixtures`. */
   demo?: boolean;
+  /** With `demo`: false skips the seeded decisions and held calls (fixtures and budgets are still fresh). The demo agents use it to start from an empty dashboard. Default true. */
+  demoActivity?: boolean;
   /** Directory with the built dashboard (apps/dashboard/dist). Served at / next to the owner API. */
   dashboardDir?: string;
 }

@@ -8,6 +8,8 @@ export interface Me {
   role: Role | null;
   mode: "sandbox" | "fixtures";
   demo: boolean;
+  /** Only on a demo server: when it next wipes and re-seeds itself. */
+  demoReset?: { next: string | null };
   loginEnabled: boolean;
   demoLoginAvailable: boolean;
   demoPasscode?: string;

@@ -19,10 +19,15 @@ export function Spinner({ label = "Loading" }: { label?: string }) {
   );
 }
 
-export function ErrorBox({ message }: { message: string | null }) {
+export function ErrorBox({ message, onRetry }: { message: string | null; onRetry?: () => void }) {
   return message ? (
     <div className="error" role="alert">
       {message}
+      {onRetry && (
+        <button type="button" className="btn small" onClick={onRetry}>
+          Try again
+        </button>
+      )}
     </div>
   ) : null;
 }
@@ -30,7 +35,7 @@ export function ErrorBox({ message }: { message: string | null }) {
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="empty">
-      <h3>{title}</h3>
+      <h2 className="h3">{title}</h2>
       {children && <p className="small">{children}</p>}
     </div>
   );

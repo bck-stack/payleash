@@ -30,6 +30,21 @@ function useTheme() {
   return [theme as Theme, (t: Theme) => setTheme(t)] as const;
 }
 
+/** A spinner that, after a few seconds, says why: the free hosted demo may be waking up. */
+function SlowSpinner() {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="stack" style={{ alignItems: "center", textAlign: "center" }}>
+      <Spinner />
+      {slow && <p className="small ink2">Still waking up. The free demo server sleeps when idle; the first load may take about 30 seconds.</p>}
+    </div>
+  );
+}
+
 export function App() {
   const me = useLoad<Me>(() => api<Me>("/api/me"), []);
   const [theme, setTheme] = useTheme();
@@ -40,7 +55,7 @@ export function App() {
     return () => window.removeEventListener(UNAUTH_EVENT, on);
   }, [me]);
 
-  if (me.loading && !me.data) return <div className="login"><Spinner /></div>;
+  if (me.loading && !me.data) return <div className="login"><SlowSpinner /></div>;
   if (!me.data) return <div className="login"><div className="card"><div className="error">Cannot reach the PayLeash server. {me.error}</div><button className="btn" onClick={me.reload}>Retry</button></div></div>;
   if (!me.data.authenticated) return <Login me={me.data} onDone={me.reload} />;
   return <Shell me={me.data} refreshMe={me.reload} theme={theme} setTheme={setTheme} />;

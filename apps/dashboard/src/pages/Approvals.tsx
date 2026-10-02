@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api, errorText } from "../api";
+import { toast } from "../components/feedback";
 import { DecisionBadge, Empty, ErrorBox, Spinner } from "../components/ui";
 import { useApp } from "../context";
 import { dateTime, timeAgo, timeLeft, toolName } from "../format";
@@ -48,7 +49,7 @@ export function Approvals({ onChange }: { onChange: () => void }) {
           <button role="tab" aria-selected={tab === "decided"} className={`btn small ${tab === "decided" ? "primary" : ""}`} onClick={() => setTab("decided")}>Decided</button>
         </div>
       </div>
-      <ErrorBox message={pending.error ?? decided.error} />
+      <ErrorBox message={pending.error ?? decided.error} onRetry={() => { pending.reload(); decided.reload(); }} />
       {loading && <Spinner />}
       {!loading && list.length === 0 && (
         <div className="card"><Empty title={tab === "pending" ? "All clear" : "Nothing decided yet"}>{tab === "pending" ? "No agent is waiting for you." : "Approved and denied calls show up here."}</Empty></div>
@@ -76,8 +77,12 @@ function ApprovalCard({ a, now, focused, canDecide, onDone }: { a: Approval; now
       const r = await api<Approval>(`/api/approvals/${a.approvalId}`, { body: { decision } });
       setResult(r);
       onDone();
+      if (r.status === "executed") toast.success(`Approved and executed: ${r.context?.summary ?? a.tool}`);
+      else if (r.status === "denied") toast.info("Denied. The agent is told no.");
+      else if (r.status === "failed") toast.error(`Approved, but not executed: ${r.error ?? "see the card"}`);
     } catch (e) {
       setError(errorText(e));
+      toast.error(errorText(e));
     } finally {
       setBusy(null);
     }
@@ -117,8 +122,8 @@ function ApprovalCard({ a, now, focused, canDecide, onDone }: { a: Approval; now
         </dl>
       )}
 
-      <section aria-label="Where each value came from" className="stack">
-        <h3>Where each value came from</h3>
+      <div className="stack">
+        <h2 className="h3">Where each value came from</h2>
         <p className="small ink2">
           {notVerified.length === 0
             ? "Every value in this call is confirmed by PayPal's own records."
@@ -134,21 +139,21 @@ function ApprovalCard({ a, now, focused, canDecide, onDone }: { a: Approval; now
           ))}
           {!ctx?.provenance.length && <li className="muted small">No checkable values in this call.</li>}
         </ul>
-      </section>
+      </div>
 
-      <section aria-label="Why it was held" className="stack">
-        <h3>Why it was held</h3>
+      <div className="stack">
+        <h2 className="h3">Why it was held</h2>
         <ul className="reasons">
           {shown.reasons.map((r) => <ReasonItem key={r.code} r={r} />)}
         </ul>
         <p className="small ink2">{shown.explanation}</p>
-      </section>
+      </div>
 
       {error && <ErrorBox message={error} />}
       {open && canDecide && (
         <div className="decide">
-          <button className="btn danger big" disabled={!!busy} onClick={() => void decide("deny")}>{busy === "deny" ? "Denying…" : "✕ Deny"}</button>
-          <button className="btn good big" disabled={!!busy} onClick={() => void decide("approve")}>{busy === "approve" ? "Approving…" : "✓ Approve"}</button>
+          <button className="btn danger big" disabled={!!busy} onClick={() => void decide("deny")}>{busy === "deny" ? "Denying…" : <><span aria-hidden="true">✕</span> Deny</>}</button>
+          <button className="btn good big" disabled={!!busy} onClick={() => void decide("approve")}>{busy === "approve" ? "Approving…" : <><span aria-hidden="true">✓</span> Approve</>}</button>
         </div>
       )}
       {open && !canDecide && <p className="small muted">This account cannot approve calls.</p>}

@@ -31,9 +31,10 @@ import type { ProxyOptions } from "./config.js";
 import { FixtureExecutor } from "./fixture-executor.js";
 import { ToolkitExecutor, type ToolExecutor } from "./executor.js";
 import { loadToolkitTools, type ToolkitTool } from "./toolkit.js";
+import { NATIVE_TOOLS } from "./native-tools.js";
 import { Notifier, emailConfigFromEnv } from "./notify.js";
 import { SessionManager } from "./sessions.js";
-import { seedDemo } from "./demo.js";
+import { blockPayPalEgress, resetDemo, seedDemo, type DemoStatus } from "./demo.js";
 
 export interface ProxyOverrides {
   db?: Db;
@@ -73,7 +74,11 @@ export interface ProxyRuntime {
   now: () => Date;
   env: NodeJS.ProcessEnv;
   /** Only in `--demo`: rebuild the seeded scenario (fixtures, budgets, held calls). */
-  demo?: { reseed(): Promise<void> };
+  demo?: { reseed(o?: { activity?: boolean }): Promise<void>; reset(): Promise<void> };
+  /** `--demo` only: housekeeping facts for /healthz. */
+  demoStatus?: DemoStatus;
+  /** `--demo` only: false when the seeded decisions and held calls are not wanted (the demo agents). */
+  demoActivity?: boolean;
   close(): void;
 }
 
@@ -196,7 +201,8 @@ export function buildProxy(opts: ProxyOptions, env: NodeJS.ProcessEnv = process.
     onHold: ({ owner }) => void late.rt?.notifier.notifyHeld(owner),
   });
 
-  const { tools, unclassified } = loadToolkitTools();
+  const { tools: toolkitTools, unclassified } = loadToolkitTools();
+  const tools = [...toolkitTools, ...NATIVE_TOOLS];
   if (unclassified.length) log(`WARNING: withholding unclassified toolkit tools (add them to classification.ts): ${unclassified.join(", ")}`);
 
   const rt: ProxyRuntime = {
@@ -229,7 +235,11 @@ export function buildProxy(opts: ProxyOptions, env: NodeJS.ProcessEnv = process.
   late.rt = rt;
   if (demo) {
     if (!fixtureExecutor || !keys.ownerPrivate) throw new Error("--demo needs the fixture executor and a throw-away owner key");
-    rt.demo = { reseed: () => seedDemo(rt) };
+    rt.demo = { reseed: (o) => seedDemo(rt, o), reset: () => resetDemo(rt) };
+    rt.demoActivity = opts.demoActivity;
+    rt.demoStatus = { startedAt: now().toISOString(), lastResetAt: now().toISOString(), nextResetAt: null, resets: 0 };
+    blockPayPalEgress();
+    if (env.PAYPAL_CLIENT_ID || env.PAYPAL_CLIENT_SECRET) log("demo mode ignores PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET: PayPal is never contacted.");
   }
   return rt;
 }

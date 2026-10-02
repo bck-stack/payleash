@@ -80,6 +80,10 @@ export class ProvenanceRegistry {
 export class RegistryBook {
   private readonly byAgent = new Map<string, ProvenanceRegistry>();
   constructor(private readonly limits: Partial<RegistryLimits> = {}) {}
+  /** Forgets everything every agent registered (the nightly demo reset). */
+  clear(): void {
+    this.byAgent.clear();
+  }
   forAgent(agentId: string): ProvenanceRegistry {
     let r = this.byAgent.get(agentId);
     if (!r) this.byAgent.set(agentId, (r = new ProvenanceRegistry(this.limits)));

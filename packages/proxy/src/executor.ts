@@ -1,5 +1,6 @@
 import { PayPalAPI } from "@paypal/agent-toolkit/mcp";
 import type { PayPalHttp } from "@payleash/core";
+import { NATIVE_CLASSIFICATION, runNativeTool } from "./native-tools.js";
 
 /** Runs a toolkit tool against PayPal and returns the toolkit's JSON string result. */
 export interface ToolExecutor {
@@ -19,6 +20,7 @@ export class ToolkitExecutor implements ToolExecutor {
   ) {}
 
   async run(method: string, args: Record<string, unknown>): Promise<string> {
+    if (Object.hasOwn(NATIVE_CLASSIFICATION, method)) return runNativeTool(this.http, method, args);
     const token = await this.http.accessToken();
     if (this.cached?.token !== token) {
       this.cached = { token, api: new PayPalAPI(token, { sandbox: this.sandbox, source: "PayLeash" }) };
