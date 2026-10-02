@@ -1,0 +1,47 @@
+# Render blueprint: one free web service that runs the PayLeash proxy in demo mode and serves the dashboard.
+# Demo mode needs no PayPal credentials: PayPal is simulated with recorded responses, keys and database are throw-away
+# (the free tier has no persistent disk), and a read-only demo login is available for visitors.
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: payleash-demo
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install -g pnpm@10.28.0 && pnpm install --frozen-lockfile --prod=false && pnpm build && pnpm build:dashboard
+    startCommand: node packages/proxy/dist/bin.js --transport http --demo --host 0.0.0.0 --dashboard apps/dashboard/dist
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      # Your login. Render generates it; read it under Environment after the first deploy.
+      - key: PAYLEASH_OWNER_TOKEN
+        generateValue: true
+      # The read-only demo login for judges and visitors. Public by design; shown on the login page (PAYLEASH_DEMO_SHOW).
+      - key: PAYLEASH_DEMO_TOKEN
+        value: judge-demo-2026
+      - key: PAYLEASH_DEMO_SHOW
+        value: "1"
+      # Render terminates TLS: trust X-Forwarded-Proto for the Secure cookie and X-Forwarded-For for the login throttle.
+      - key: PAYLEASH_TRUST_PROXY
+        value: "1"
+      - key: PAYLEASH_COOKIE_SECURE
+        value: "1"
+      # Optional: plain-language policies and one-sentence explanations from Cloudflare Workers AI (free tier).
+      - key: CF_ACCOUNT_ID
+        sync: false
+      - key: CF_API_TOKEN
+        sync: false
+      # Optional: Web Push for new held calls. Generate with `pnpm payleash vapid init --subject mailto:you@example.com`,
+      # then paste the values it prints (the private key stays in this Render environment, never in the repository).
+      - key: PAYLEASH_VAPID_PUBLIC
+        sync: false
+      - key: PAYLEASH_VAPID_PRIVATE
+        sync: false
+      - key: PAYLEASH_VAPID_SUBJECT
+        sync: false
+      # Optional: an email with a link when no browser could be notified (Resend free tier).
+      - key: RESEND_API_KEY
+        sync: false
+      - key: NOTIFY_EMAIL_TO
+        sync: false

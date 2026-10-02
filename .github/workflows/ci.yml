@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, s1]
+    branches: [main, s1, s2]
   pull_request:
 
 permissions:
@@ -26,6 +26,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build (compiles packages; the stdio test runs the compiled binary)
         run: pnpm build
+      - name: Build the dashboard
+        run: pnpm build:dashboard
       - name: Typecheck
         run: pnpm typecheck
       - name: Lint

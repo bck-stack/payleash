@@ -157,7 +157,7 @@ rm /tmp/tampered.db
 
 ## 8. Optional: drive it from a real MCP client
 
-Claude Desktop (stdio) in `claude_desktop_config.json`, with absolute paths:
+A desktop MCP client (stdio): add a `mcpServers` entry to its config file, with absolute paths:
 
 ```json
 {
@@ -231,6 +231,15 @@ until it expires. By hand:
 curl -s -u "$PAYPAL_CLIENT_ID:$PAYPAL_CLIENT_SECRET" -d "token=$OLD_TOKEN&token_type_hint=ACCESS_TOKEN" \
   https://api-m.sandbox.paypal.com/v1/oauth2/token/terminate -w '%{http_code}\n'
 ```
+
+## Look at it in the dashboard
+
+With the proxy from step 4 still running, build the dashboard once (`pnpm build:dashboard`) and start the proxy with
+`--dashboard apps/dashboard/dist`, then open `http://127.0.0.1:8787` and sign in with `PAYLEASH_OWNER_TOKEN`. The held 60 USD
+refund shows up under **Approvals** (with *Buyer email unverifiable* instead of a plain hold if the order was paid by card
+and the call named a payee), the audit chain under **Audit**, and **Backtest** can replay the recorded history or, with the
+Transaction Search permission on your sandbox app, your own sandbox transactions (*Live sandbox*). If Transaction Search answers
+403 right after you added the permission, run `pnpm payleash paypal refresh-token` and restart the proxy (see above).
 
 ## Dry run without keys
 
