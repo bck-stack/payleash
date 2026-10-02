@@ -37,8 +37,13 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatOptions {
+  maxTokens?: number;
+  timeoutMs?: number;
+}
+
 export interface ChatClient {
-  complete(messages: ChatMessage[]): Promise<string>;
+  complete(messages: ChatMessage[], opts?: ChatOptions): Promise<string>;
 }
 
 export interface OpenAiCompatOptions {
@@ -53,14 +58,14 @@ export interface OpenAiCompatOptions {
 export class OpenAiCompatClient implements ChatClient {
   constructor(private readonly o: OpenAiCompatOptions) {}
 
-  async complete(messages: ChatMessage[]): Promise<string> {
+  async complete(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), this.o.timeoutMs ?? 5000);
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? this.o.timeoutMs ?? 5000);
     try {
       const res = await (this.o.fetch ?? fetch)(`${this.o.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.o.apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: this.o.model, messages, temperature: 0, max_tokens: 120 }),
+        body: JSON.stringify({ model: this.o.model, messages, temperature: 0, max_tokens: opts.maxTokens ?? 120 }),
         signal: ctrl.signal,
       });
       if (!res.ok) throw new Error(`LLM request failed with status ${res.status}`);

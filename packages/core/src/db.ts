@@ -57,6 +57,19 @@ const MIGRATIONS: string[] = [
   CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
   `,
+  // 3: the mandates the owner issued or the proxy has seen (metadata only, never the signed token)
+  `
+  CREATE TABLE mandates (
+    id            TEXT PRIMARY KEY,
+    agent_id      TEXT    NOT NULL,
+    claims_json   TEXT    NOT NULL,   -- canonical JSON of the verified Mandate
+    not_before    INTEGER NOT NULL,   -- unix seconds
+    expires_at    INTEGER NOT NULL,
+    first_seen_ms INTEGER NOT NULL,
+    source        TEXT    NOT NULL CHECK (source IN ('issued','seen'))
+  );
+  CREATE INDEX mandates_agent ON mandates (agent_id, not_before);
+  `,
 ];
 
 export function migrate(db: Db): void {

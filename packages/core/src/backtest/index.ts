@@ -4,3 +4,4 @@ export * from "./actions.js";
 export * from "./report.js";
 export * from "./whatif.js";
 export * from "./run.js";
+export * from "./defaults.js";

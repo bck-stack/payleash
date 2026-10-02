@@ -1,7 +1,7 @@
 import type { KeyObject } from "node:crypto";
 import { callHash } from "./canonical.js";
 import { AuditLog } from "./audit/log.js";
-import { MandateError, type Mandate, type ReplayGuard, type StepUpClaims, verifyMandate, verifyStepUp } from "./mandate/index.js";
+import { MandateError, type Mandate, type MandateRegistry, type ReplayGuard, type StepUpClaims, verifyMandate, verifyStepUp } from "./mandate/index.js";
 import { parseDecimal } from "./money.js";
 import type { PayPalReader } from "./paypal/types.js";
 import { evaluatePolicy, type Decision, type OperationFacts, type Reason, type Reservation, type SqlitePolicyStore } from "./policy/index.js";
@@ -15,6 +15,8 @@ export interface GuardDeps {
   registries: RegistryBook;
   ownerPublicKey: KeyObject;
   stepUpPublicKey: KeyObject;
+  /** When set, every mandate that verifies is remembered (claims only) so the dashboard can show what each agent may do. */
+  mandates?: MandateRegistry;
   /** Optional LLM wording. Called only after the decision is made. */
   explainer?: Explainer;
   now?: () => Date;
@@ -104,6 +106,7 @@ export class Guard {
     }
     const agentId = mandate.agentId;
     const who = { agentId, mandate };
+    this.d.mandates?.record(mandate, "seen", this.now().getTime());
 
     // 2. Every write tool must be modelled. Unknown tools are refused (fail closed).
     const descriptor = descriptorFor(req.tool);

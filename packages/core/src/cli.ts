@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { defaultKeyDir, initKeys, loadPrivateKey, loadPublicKey } from "./keys.js";
+import { initVapid } from "./vapid.js";
+import { MandateRegistry } from "./mandate/registry.js";
 import { AuditLog } from "./audit/index.js";
 import { openDb, resolveDbPath } from "./db.js";
 import { issueMandate, verifyMandate } from "./mandate/index.js";
@@ -25,8 +27,11 @@ export const defaultIo: CliIo = {
 const USAGE = `payleash <command>
 
   keys init [--dir D] [--force] [--allow-in-repo]   generate the owner + step-up Ed25519 keys (outside the repo)
-  mandate issue --file F [--ttl 30d] [--issuer NAME] [--key-dir D]
-                                                   sign an operation mandate; prints the token
+  mandate issue --file F [--ttl 30d] [--issuer NAME] [--key-dir D] [--record]
+                                                   sign an operation mandate; prints the token. With --record (or PAYLEASH_DB_PATH
+                                                   set) its claims are also saved so the dashboard can show them
+  vapid init --subject mailto:you@example.com [--dir D] [--force]
+                                                   generate the Web Push (VAPID) keys for dashboard notifications, outside the repo
   mandate verify (--token T | --file F) [--key-dir D]
                                                    verify a mandate and print its claims
   freeze [--agent ID] [--reason TEXT]               kill switch: deny every write tool (globally, or for one agent)
@@ -78,7 +83,7 @@ registerCommand("keys init", async (args, io) => {
 registerCommand("mandate issue", async (args, io) => {
   const { values } = parseArgs({
     args,
-    options: { file: { type: "string" }, ttl: { type: "string" }, issuer: { type: "string" }, "key-dir": { type: "string" } },
+    options: { file: { type: "string" }, ttl: { type: "string" }, issuer: { type: "string" }, "key-dir": { type: "string" }, record: { type: "boolean" } },
   });
   if (!values.file) throw new Error("--file is required");
   const input = JSON.parse(readFileSync(values.file, "utf8"));
@@ -88,7 +93,28 @@ registerCommand("mandate issue", async (args, io) => {
     ttlSeconds: parseTtl(values.ttl ?? input.ttl ?? "30d"),
   });
   io.err(`mandate ${mandate.id} for agent "${mandate.agentId}" valid until ${new Date(mandate.expiresAt * 1000).toISOString()}`);
+  if (values.record || io.env.PAYLEASH_DB_PATH) {
+    const db = openDb(resolveDbPath(io.env));
+    try {
+      new MandateRegistry(db).record(mandate, "issued");
+    } finally {
+      db.close();
+    }
+    io.err("claims recorded for the dashboard (the token itself is not stored)");
+  }
   io.out(token);
+  return 0;
+});
+
+registerCommand("vapid init", async (args, io) => {
+  const { values } = parseArgs({ args, options: { dir: { type: "string" }, subject: { type: "string" }, force: { type: "boolean" }, "allow-in-repo": { type: "boolean" } } });
+  if (!values.subject) throw new Error('--subject is required, e.g. --subject mailto:you@example.com');
+  const r = initVapid({ dir: values.dir ?? defaultKeyDir(io.env), subject: values.subject, force: values.force, allowInRepo: values["allow-in-repo"] });
+  io.out(`VAPID keys written to ${r.file}`);
+  io.out("The proxy loads them from PAYLEASH_KEY_DIR. On a host without a persistent disk, set instead:");
+  io.out(`  PAYLEASH_VAPID_PUBLIC=${r.keys.publicKey}`);
+  io.out(`  PAYLEASH_VAPID_SUBJECT=${r.keys.subject}`);
+  io.out("  PAYLEASH_VAPID_PRIVATE=<the privateKey in vapid.json; keep it secret>");
   return 0;
 });
 
