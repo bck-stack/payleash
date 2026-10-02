@@ -53,6 +53,16 @@ describe("login and sessions", () => {
     expect(me.body).toMatchObject({ authenticated: true, role: "owner", canApprove: true, canFreeze: true, mode: "fixtures" });
   });
 
+  it("shows the public demo passcode on the login page only when the operator opts in, and never to a signed-in user", async () => {
+    const hidden = await boot();
+    expect((await hidden.call("/api/me")).body.demoPasscode).toBeUndefined();
+    await running!.close();
+    const shown = await boot({ PAYLEASH_DEMO_SHOW: "1" });
+    expect((await shown.call("/api/me")).body.demoPasscode).toBe(DEMO);
+    const { cookie } = await shown.login(OWNER);
+    expect((await shown.call("/api/me", { cookie })).body.demoPasscode).toBeUndefined();
+  });
+
   it("refuses a wrong token, anything unauthenticated, a tampered cookie and an expired one", async () => {
     const { call, login, rt } = await boot();
     expect((await login("nope")).status).toBe(401);

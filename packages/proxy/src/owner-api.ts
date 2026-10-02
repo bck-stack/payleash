@@ -313,6 +313,8 @@ export function createOwnerApi(rt: ProxyRuntime): OwnerApi {
         demo: inFixtureMode(),
         loginEnabled: !!rt.sessions,
         demoLoginAvailable: !!rt.demoToken,
+        // The demo passcode is public by design (it only opens a read-only account on recorded data); the operator opts in to showing it.
+        ...(!role && rt.demoToken && rt.env.PAYLEASH_DEMO_SHOW === "1" ? { demoPasscode: rt.demoToken } : {}),
         canApprove: role === "owner" || (role === "demo" && inFixtureMode()),
         canSign: role === "owner" && !!rt.ownerPrivateKey,
         canFreeze: role === "owner",
