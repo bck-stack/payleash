@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { defaultKeyDir, initKeys, loadPrivateKey, loadPublicKey } from "./keys.js";
+import { openDb, resolveDbPath } from "./db.js";
 import { issueMandate, verifyMandate } from "./mandate/index.js";
+import { SqlitePolicyStore } from "./policy/index.js";
 
 export interface CliIo {
   out: (s: string) => void;
@@ -22,6 +24,11 @@ const USAGE = `payleash <command>
                                                    sign an operation mandate; prints the token
   mandate verify (--token T | --file F) [--key-dir D]
                                                    verify a mandate and print its claims
+  freeze [--agent ID] [--reason TEXT]               kill switch: deny every write tool (globally, or for one agent)
+  unfreeze [--agent ID]                             lift a freeze
+  status [--agent ID]                               show freeze state and 24h budgets
+
+The database path comes from PAYLEASH_DB_PATH (default ./payleash.db).
 `;
 
 export function parseTtl(s: string): number {
@@ -79,10 +86,45 @@ registerCommand("mandate verify", async (args, io) => {
   return 0;
 });
 
+const withStore = <T>(io: CliIo, fn: (store: SqlitePolicyStore) => T): T => {
+  const db = openDb(resolveDbPath(io.env));
+  try {
+    return fn(new SqlitePolicyStore(db));
+  } finally {
+    db.close();
+  }
+};
+
+registerCommand("freeze", async (args, io) => {
+  const { values } = parseArgs({ args, options: { agent: { type: "string" }, reason: { type: "string" } } });
+  withStore(io, (s) => s.freeze({ agentId: values.agent }, values.reason));
+  io.out(values.agent ? `agent "${values.agent}" frozen: every write tool is denied` : "GLOBAL FREEZE on: every write tool is denied for every agent");
+  return 0;
+});
+
+registerCommand("unfreeze", async (args, io) => {
+  const { values } = parseArgs({ args, options: { agent: { type: "string" } } });
+  const changed = withStore(io, (s) => s.unfreeze({ agentId: values.agent }));
+  io.out(changed ? "freeze lifted" : "nothing was frozen at that scope");
+  return 0;
+});
+
+registerCommand("status", async (args, io) => {
+  const { values } = parseArgs({ args, options: { agent: { type: "string" } } });
+  withStore(io, (s) => {
+    const scopes = s.frozenScopes();
+    io.out(scopes.length ? `frozen: ${scopes.map((f) => f.scope + (f.reason ? ` (${f.reason})` : "")).join(", ")}` : "frozen: nothing");
+    if (values.agent) io.out(JSON.stringify(s.summary(values.agent), null, 2));
+  });
+  return 0;
+});
+
 /** Returns the process exit code. */
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
-  const [a, b, ...rest] = argv;
-  const cmd = commands.get(`${a} ${b}`);
+  const two = commands.get(`${argv[0]} ${argv[1]}`);
+  const cmd = two ?? commands.get(argv[0] ?? "");
+  const rest = argv.slice(two ? 2 : 1);
+  const [a] = argv;
   if (!cmd) {
     io.err(USAGE);
     return a === "help" || a === "--help" || a === undefined ? 0 : 2;

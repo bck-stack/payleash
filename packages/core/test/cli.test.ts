@@ -40,6 +40,25 @@ describe("cli", () => {
     }
   });
 
+  it("freeze / status / unfreeze drive the kill switch in the database", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "payleash-cli-"));
+    try {
+      const env = { PAYLEASH_DB_PATH: join(dir, "p.db") };
+      const a = io(env);
+      expect(await runCli(["freeze", "--reason", "drill"], a.cliIo)).toBe(0);
+      expect(a.out.join()).toMatch(/GLOBAL FREEZE/);
+      const s = io(env);
+      await runCli(["status"], s.cliIo);
+      expect(s.out.join()).toMatch(/frozen: global \(drill\)/);
+      expect(await runCli(["unfreeze"], io(env).cliIo)).toBe(0);
+      const s2 = io(env);
+      await runCli(["status", "--agent", "a1"], s2.cliIo);
+      expect(s2.out[0]).toBe("frozen: nothing");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("prints usage for unknown commands", async () => {
     const r = io();
     expect(await runCli(["nope"], r.cliIo)).toBe(2);
