@@ -9,6 +9,8 @@ export interface OrderState {
   approveUrl?: string;
   captureId?: string;
   buyerEmail?: string;
+  /** Order total in USD, from the plan. */
+  total?: string;
   capturedAt?: string;
   error?: string;
 }

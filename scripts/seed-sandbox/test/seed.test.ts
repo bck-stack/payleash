@@ -89,7 +89,7 @@ describe("seed runner (fake sandbox)", () => {
     await runSeed(api, st, opts());
     expect(Object.keys(st.products)).toHaveLength(PRODUCTS.length);
     expect(Object.values(st.orders).filter((o) => o.stage === "captured")).toHaveLength(30);
-    expect(Object.values(st.orders).every((o) => o.captureId && o.buyerEmail)).toBe(true);
+    expect(Object.values(st.orders).every((o) => o.captureId && o.buyerEmail && o.total)).toBe(true);
     expect(Object.keys(st.refunds)).toHaveLength(planRefunds(planOrders(30)).length);
     expect(Object.keys(st.invoices)).toHaveLength(INVOICES.length);
     expect(Object.values(st.invoices).filter((i) => i.sent)).toHaveLength(INVOICES.filter((i) => i.send).length);

@@ -137,7 +137,7 @@ export async function seedOrders(api: PayPalApi, st: SeedState, o: SeedOptions):
             o.log(`  order ${order.key}: ${errText(r2)}`);
             break;
           }
-          os = st.orders[order.key] = { orderId: r2.body.id, stage: "created" };
+          os = st.orders[order.key] = { orderId: r2.body.id, stage: "created", total: order.total };
           absorb(os, r2.body);
         } else {
           st.orders[order.key] = { stage: "failed", error: `create: ${errText(r)}` };
@@ -146,7 +146,7 @@ export async function seedOrders(api: PayPalApi, st: SeedState, o: SeedOptions):
           continue;
         }
       } else {
-        os = st.orders[order.key] = { orderId: r.body.id, stage: "created" };
+        os = st.orders[order.key] = { orderId: r.body.id, stage: "created", total: order.total };
         absorb(os, r.body);
       }
       probed = true;
