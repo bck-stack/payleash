@@ -75,3 +75,14 @@ export class ProvenanceRegistry {
     return [...new Set(spans.map((s) => s.sourceId))];
   }
 }
+
+/** One registry per agent id, so one agent's untrusted text never vouches for or taints another's calls. */
+export class RegistryBook {
+  private readonly byAgent = new Map<string, ProvenanceRegistry>();
+  constructor(private readonly limits: Partial<RegistryLimits> = {}) {}
+  forAgent(agentId: string): ProvenanceRegistry {
+    let r = this.byAgent.get(agentId);
+    if (!r) this.byAgent.set(agentId, (r = new ProvenanceRegistry(this.limits)));
+    return r;
+  }
+}
