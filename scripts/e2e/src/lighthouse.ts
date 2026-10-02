@@ -21,7 +21,7 @@ try {
   const targets = [{ name: "Login", path: "/", cookie: "" }, ...PAGES.map((p) => ({ name: p.name, path: p.path, cookie }))];
   for (const form of ["mobile", "desktop"] as const) {
     for (const t of targets) {
-      const flags = { port: PORT, output: "json" as const, logLevel: "error" as const, onlyCategories: ["accessibility"], formFactor: form, screenEmulation: form === "mobile" ? { mobile: true, width: 375, height: 760, deviceScaleFactor: 2, disabled: false } : { mobile: false, width: 1280, height: 860, deviceScaleFactor: 1, disabled: false }, extraHeaders: t.cookie ? { Cookie: t.cookie } : {} };
+      const flags = { port: PORT, output: "json" as const, logLevel: "error" as const, onlyCategories: ["accessibility"], formFactor: form, screenEmulation: form === "mobile" ? { mobile: true, width: 375, height: 760, deviceScaleFactor: 2, disabled: false } : { mobile: false, width: 1280, height: 860, deviceScaleFactor: 1, disabled: false }, extraHeaders: (t.cookie ? { Cookie: t.cookie } : {}) as Record<string, string> };
       const r = await lighthouse(`${base}${t.path}`, flags);
       const score = Math.round((r?.lhr.categories.accessibility?.score ?? 0) * 100);
       const bad = Object.values(r?.lhr.audits ?? {}).filter((a) => a.score !== null && a.score < 1 && a.scoreDisplayMode !== "notApplicable" && a.scoreDisplayMode !== "informative" && a.scoreDisplayMode !== "manual");
