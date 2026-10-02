@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DAY_MS,
@@ -218,7 +219,8 @@ describe("SqlitePolicyStore", () => {
 
   it("takes the database path from PAYLEASH_DB_PATH", async () => {
     const { resolveDbPath } = await import("../src/index.js");
-    expect(resolveDbPath({ PAYLEASH_DB_PATH: "/tmp/x/y.db" })).toBe("/tmp/x/y.db");
-    expect(resolveDbPath({})).toMatch(/payleash\.db$/);
+    // OS-aware: on Windows `resolve` turns "/tmp/x/y.db" into "C:\\tmp\\x\\y.db", so compare resolved paths.
+    expect(resolveDbPath({ PAYLEASH_DB_PATH: "/tmp/x/y.db" })).toBe(resolve("/tmp/x/y.db"));
+    expect(resolveDbPath({})).toBe(resolve("payleash.db"));
   });
 });

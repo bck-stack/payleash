@@ -81,7 +81,7 @@ export function buildDisputeFixtures(history: HistoryFile): Record<string, unkno
       reason: i === 0 ? "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED" : "MERCHANDISE_OR_SERVICE_NOT_RECEIVED",
       dispute_amount: { currency_code: "USD", value: o.total },
       dispute_life_cycle_stage: "INQUIRY",
-      disputed_transactions: [{ seller_transaction_id: o.captureId, gross_amount: { currency_code: "USD", value: o.total }, buyer: { name: o.buyer.split("@")[0], email: o.buyer } }],
+      disputed_transactions: [{ seller_transaction_id: o.captureId, gross_amount: { currency_code: "USD", value: o.total }, buyer: o.buyer ? { name: o.buyer.split("@")[0], email: o.buyer } : { name: "card buyer" } }],
       messages: [{ posted_by: "BUYER", time_posted: iso(created), content: texts[i] }],
     };
   });

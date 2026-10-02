@@ -190,7 +190,8 @@ describe("key storage", () => {
     const dir = mkdtempSync(join(tmpdir(), "payleash-keys-"));
     try {
       const res = initKeys({ dir: join(dir, "k") });
-      expect(statSync(join(dir, "k", "owner.key.pem")).mode & 0o777).toBe(0o600);
+      // Windows has no POSIX file modes, so the 0600 check only means something elsewhere.
+      if (process.platform !== "win32") expect(statSync(join(dir, "k", "owner.key.pem")).mode & 0o777).toBe(0o600);
       expect(res.files).toHaveLength(4);
       expect(() => initKeys({ dir: join(dir, "k") })).toThrow(/already exists/);
       expect(() => initKeys({ dir: join(dir, "k"), force: true })).not.toThrow();

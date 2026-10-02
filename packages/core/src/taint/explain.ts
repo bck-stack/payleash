@@ -1,4 +1,5 @@
 import type { Decision, Reason } from "../policy/types.js";
+import { groupReasons } from "../reasons.js";
 import type { ArgAssessment } from "./evaluate.js";
 
 /**
@@ -17,14 +18,17 @@ export interface Explainer {
 }
 
 export function templateExplanation(i: ExplainInput): string {
-  const first = i.reasons[0]?.message;
+  // One reason per code: a value reported twice is not a second reason.
+  const reasons = groupReasons(i.reasons);
+  const first = reasons[0]?.message;
+  const more = reasons.length > 1 ? ` (+${reasons.length - 1} more reason${reasons.length > 2 ? "s" : ""})` : "";
   switch (i.decision) {
     case "allow":
       return `Allowed: ${i.tool} is within the mandate and every critical value matches PayPal's records.`;
     case "hold":
-      return `Held for your approval: ${first ?? "a human must confirm this call"}${i.reasons.length > 1 ? ` (+${i.reasons.length - 1} more reason${i.reasons.length > 2 ? "s" : ""})` : ""}`;
+      return `Held for your approval: ${first ?? "a human must confirm this call"}${more}`;
     case "deny":
-      return `Denied: ${first ?? "the call violates the mandate"}${i.reasons.length > 1 ? ` (+${i.reasons.length - 1} more reason${i.reasons.length > 2 ? "s" : ""})` : ""}`;
+      return `Denied: ${first ?? "the call violates the mandate"}${more}`;
   }
 }
 
@@ -113,7 +117,7 @@ export class LlmExplainer implements Explainer {
     const facts = {
       tool: i.tool,
       decision: i.decision,
-      reasons: i.reasons.map((r) => ({ code: r.code, message: r.message.slice(0, 300) })),
+      reasons: groupReasons(i.reasons).map((r) => ({ code: r.code, count: r.count, message: r.message.slice(0, 300) })),
       arguments: i.args.map((a) => ({ name: a.path, value: a.value.slice(0, 60), status: a.status })),
     };
     try {

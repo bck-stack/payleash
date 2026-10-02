@@ -4,12 +4,15 @@ import { defaultKeyDir, initKeys, loadPrivateKey, loadPublicKey } from "./keys.j
 import { AuditLog } from "./audit/index.js";
 import { openDb, resolveDbPath } from "./db.js";
 import { issueMandate, verifyMandate } from "./mandate/index.js";
+import { PayPalHttp, SANDBOX_BASE_URL, refreshAccessToken } from "./paypal/http.js";
 import { SqlitePolicyStore } from "./policy/index.js";
 
 export interface CliIo {
   out: (s: string) => void;
   err: (s: string) => void;
   env: NodeJS.ProcessEnv;
+  /** Injected in tests; defaults to the global fetch. */
+  fetch?: typeof fetch;
 }
 
 export const defaultIo: CliIo = {
@@ -28,6 +31,9 @@ const USAGE = `payleash <command>
   freeze [--agent ID] [--reason TEXT]               kill switch: deny every write tool (globally, or for one agent)
   unfreeze [--agent ID]                             lift a freeze
   status [--agent ID]                               show freeze state and 24h budgets
+
+  paypal refresh-token                              terminate PayPal's cached sandbox access token and fetch a new one
+                                                   (needed after you change the app's permissions in the developer dashboard)
 
   audit verify [--db PATH] [--head HASH]            recompute the audit hash chain; exit 1 if anything was tampered with
   audit head [--db PATH]                            print "seq hash" of the newest entry (record it elsewhere to detect truncation)
@@ -123,6 +129,25 @@ registerCommand("audit tail", async (args, io) => {
   const { values } = parseArgs({ args, options: { db: { type: "string" }, n: { type: "string", short: "n" } } });
   for (const e of withAudit(io, values.db, (log) => log.entries({ limit: Number(values.n ?? 20) }))) {
     io.out(`#${e.seq} ${e.ts} ${e.agent} ${e.tool} ${e.decision}${e.paypalResultId ? ` -> ${e.paypalResultId}` : ""}`);
+  }
+  return 0;
+});
+
+registerCommand("paypal refresh-token", async (_args, io) => {
+  const clientId = io.env.PAYPAL_CLIENT_ID?.trim();
+  const clientSecret = io.env.PAYPAL_CLIENT_SECRET?.trim();
+  if (!clientId || !clientSecret) throw new Error("PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET (sandbox REST app credentials) must be set");
+  // Sandbox only: PayPalHttp refuses any other host.
+  const http = new PayPalHttp({ baseUrl: io.env.PAYPAL_BASE_URL?.trim() || SANDBOX_BASE_URL, clientId, clientSecret, fetch: io.fetch });
+  const r = await refreshAccessToken(http);
+  io.out(`terminate: HTTP ${r.terminated.status}${r.terminated.ok ? " (ok)" : ` (failed: ${r.terminated.body || "no body"})`}`);
+  io.out(`new token: ${r.replaced ? "a different token was issued" : "PayPal returned the SAME token (it was not terminated)"}, valid for ${r.after.expiresInSeconds}s`);
+  io.out(`scopes now (${r.after.scopes.length}):`);
+  for (const s of r.after.scopes) io.out(`  ${s.replace("https://uri.paypal.com/services/", "")}${r.scopesAdded.includes(s) ? "   <- new" : ""}`);
+  for (const s of r.scopesRemoved) io.out(`  removed: ${s}`);
+  if (!r.terminated.ok || !r.replaced) {
+    io.err("The token was not replaced. See docs/SMOKE-TEST.md, 'Permission changes do not apply'.");
+    return 1;
   }
   return 0;
 });

@@ -6,13 +6,14 @@ import {
   SqlitePolicyStore,
   callHash,
   formatMinor,
+  groupReasons,
   mintStepUp,
   parseDecimal,
   verifyMandate,
   type Authorization,
+  type HumanReason,
   type Mandate,
   type PayPalReader,
-  type Reason,
 } from "@payleash/core";
 import type { Approval } from "./approvals.js";
 import { ApprovalStore } from "./approvals.js";
@@ -71,7 +72,7 @@ export interface ApprovalView {
   status: "pending_approval" | "approving" | "executed" | "failed" | "denied" | "expired";
   approvalId: string;
   tool: string;
-  reasons: Reason[];
+  reasons: HumanReason[];
   explanation: string;
   expiresAt: string;
   result?: unknown;
@@ -104,8 +105,9 @@ export class ProxyApp {
     const auth = await this.d.guard.authorize({ mandateToken: session.mandateToken, tool, args });
 
     if (auth.decision === "deny") {
-      this.log(`deny ${session.mandate.agentId} ${tool}: ${auth.reasons.map((r) => r.code).join(",")}`);
-      return json({ status: "denied", reasons: auth.reasons, explanation: auth.explanation }, true);
+      this.log(`deny ${session.mandate.agentId} ${tool}: ${[...new Set(auth.reasons.map((r) => r.code))].join(",")}`);
+      // People (and agents) see one row per reason code; the audit log keeps every raw reason.
+      return json({ status: "denied", reasons: groupReasons(auth.reasons), explanation: auth.explanation }, true);
     }
 
     if (auth.decision === "hold") {
@@ -121,7 +123,7 @@ export class ProxyApp {
         ttlMs: this.d.approvalTtlMs ?? 60 * 60 * 1000,
       });
       this.log(`hold ${session.mandate.agentId} ${tool} -> ${approval.id}${reused ? " (existing)" : ""}`);
-      return json({ status: "pending_approval", approvalId: approval.id, reasons: auth.reasons, explanation: auth.explanation });
+      return json({ status: "pending_approval", approvalId: approval.id, reasons: groupReasons(auth.reasons), explanation: auth.explanation });
     }
 
     const { outcome: _outcome, ...result } = await this.execute(auth, tool, args);
@@ -208,7 +210,7 @@ export class ProxyApp {
       status: viewStatus(a.status),
       approvalId: a.id,
       tool: a.tool,
-      reasons: a.reasons,
+      reasons: groupReasons(a.reasons),
       explanation: a.explanation,
       expiresAt: new Date(a.expiresAtMs).toISOString(),
       ...(a.result !== undefined ? { result: a.result } : {}),
@@ -243,7 +245,7 @@ export class ProxyApp {
       const auth = await this.d.guard.authorize({ mandateToken, tool: a.tool, args: a.args, stepUpToken });
       if (auth.decision !== "allow") {
         // The world changed since the hold (frozen, mandate expired, PayPal balance moved): the approval does not override hard rules.
-        const error = `Not executed after approval: ${auth.reasons.map((r) => r.message).join(" ")}`;
+        const error = `Not executed after approval: ${groupReasons(auth.reasons).map((r) => r.message).join(" ")}`;
         this.d.approvals.settle(approvalId, "failed", { error });
         return withArgs(this.view(this.d.approvals.get(approvalId)!));
       }

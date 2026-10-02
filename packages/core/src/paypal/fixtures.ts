@@ -17,6 +17,9 @@ export const DEMO_IDS = {
   /** alice@example.com, $20.00, 120 days old. */
   orderOld: "2XY98765ZT432109Q",
   captureOld: "1QR45678ST901234U",
+  /** Paid by card: PayPal's order has `payer: null` (no buyer email), as in the real sandbox. $64.00, 5 days old. */
+  orderCard: "3CD45678EF901234G",
+  captureCard: "9HI56789JK012345L",
   /** carol@example.com, $15.00, fully refunded already. */
   orderRefunded: "4MN56789PQ012345R",
   captureRefunded: "6UV78901WX234567Y",
@@ -35,7 +38,8 @@ const API = "https://api.sandbox.paypal.com";
 export interface OrderFixtureSpec {
   orderId: string;
   captureId: string;
-  buyer: string;
+  /** The buyer's PayPal email, or null for a card-paid order: the real sandbox returns `payer: null` there. */
+  buyer: string | null;
   total: string;
   /** ISO timestamp of the capture. */
   createdAt: string;
@@ -73,7 +77,7 @@ export function orderFixtures(s: OrderFixtureSpec): FixtureResponses {
     status: "COMPLETED",
     create_time: created,
     update_time: created,
-    payer: { email_address: s.buyer, payer_id: `PAYER${s.orderId.slice(0, 8)}`, name: { given_name: s.buyer.split("@")[0], surname: "Sandbox" } },
+    payer: s.buyer === null ? null : { email_address: s.buyer, payer_id: `PAYER${s.orderId.slice(0, 8)}`, name: { given_name: s.buyer.split("@")[0], surname: "Sandbox" } },
     purchase_units: [
       {
         reference_id: "default",
@@ -126,6 +130,7 @@ export function buildDemoFixtures(now: Date = new Date()): FixtureResponses {
     }),
     ...orderFixtures({ orderId: I.order100, captureId: I.capture100, buyer: "bob@example.com", total: "100.00", createdAt: iso(daysAgo(now, 20)), refunds: [{ id: "9RF11111AA222222B", value: "30.00" }] }),
     ...orderFixtures({ orderId: I.orderOld, captureId: I.captureOld, buyer: "alice@example.com", total: "20.00", createdAt: iso(daysAgo(now, 120)) }),
+    ...orderFixtures({ orderId: I.orderCard, captureId: I.captureCard, buyer: null, total: "64.00", createdAt: iso(daysAgo(now, 5)), items: [{ name: "Canvas tote bag", unit: "32.00", qty: 2 }] }),
     ...orderFixtures({ orderId: I.orderRefunded, captureId: I.captureRefunded, buyer: "carol@example.com", total: "15.00", createdAt: iso(daysAgo(now, 30)), refunds: [{ id: "5RF33333CC444444D", value: "15.00" }] }),
     [`/v1/customer/disputes/${I.dispute}`]: {
       dispute_id: I.dispute,
