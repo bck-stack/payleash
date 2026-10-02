@@ -118,6 +118,7 @@ describe("Guard (mandate -> policy -> taint -> audit)", () => {
     const a = await s.guard.authorize({ mandateToken: s.token, tool: "create_refund", args });
     expect(a.decision).toBe("deny");
     expect(a.reasons.map((r) => r.code)).toEqual(expect.arrayContaining(["payee_not_original_buyer", "refund_exceeds_balance", "exceeds_max_per_op", "tainted_argument"]));
+    expect(a.reasons.filter((r) => r.code === "payee_not_original_buyer")).toHaveLength(1);
     expect(a.reservation).toBeUndefined();
     expect(s.audit.entries().at(-1)).toMatchObject({ decision: "deny", agent: "support-agent", mandateId: a.mandate!.id });
     expect(s.policy.spentSince("support-agent", "create_refund", "USD", 0)).toBe(0);

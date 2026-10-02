@@ -113,7 +113,9 @@ export class Guard {
     const taint = await evaluateTaint({ call, descriptor, reader: this.d.reader, registry: this.d.registries.forAgent(agentId) });
     const policy = evaluatePolicy(mandate, call, { ...policyCtx, facts: taint.facts });
 
-    const reasons = dedupe([...taint.reasons, ...policy.reasons]);
+    // The firewall's payee message names the capture and buyer; do not repeat the policy's version of the same finding.
+    const policyReasons = policy.reasons.filter((r) => !(r.code === "payee_not_original_buyer" && taint.reasons.some((t) => t.code === r.code)));
+    const reasons = dedupe([...taint.reasons, ...policyReasons]);
     const denied = taint.decision === "deny" || policy.decision === "deny";
     const held = taint.decision === "hold" || policy.decision === "hold";
     let decision: Decision = denied ? "deny" : held ? "hold" : "allow";
