@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, errorText } from "../api";
+import { confirmDialog, toast } from "../components/feedback";
 import { DecisionBadge, Empty, ErrorBox, Spinner } from "../components/ui";
 import { useApp } from "../context";
 import { clock, toolName } from "../format";
@@ -14,23 +15,26 @@ export function Overview({ onChange }: { onChange: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const act = async (path: string, body: object = {}) => {
+  const act = async (path: string, body: object = {}, done?: string) => {
     setBusy(true);
     setError(null);
     try {
       await api(path, { body });
       o.reload();
       onChange();
+      if (done) toast.success(done);
     } catch (e) {
       setError(errorText(e));
+      toast.error(errorText(e));
     } finally {
       setBusy(false);
     }
   };
 
   const global = o.data?.frozen.global;
-  const freezeAll = () => {
-    if (window.confirm("Freeze ALL agents? Every write call (refunds, invoices, ...) is denied immediately. Reads keep working.")) void act("/api/freeze", { reason: "Kill switch pressed in the dashboard" });
+  const freezeAll = async () => {
+    const ok = await confirmDialog({ title: "Freeze all agents?", body: "Every write call (refunds, invoices, ...) is denied immediately. Reads keep working. You can lift it again at any time.", confirmLabel: "Freeze all agents", danger: true });
+    if (ok) await act("/api/freeze", { reason: "Kill switch pressed in the dashboard" }, "Kill switch ON: every agent is frozen.");
   };
 
   return (
@@ -41,17 +45,17 @@ export function Overview({ onChange }: { onChange: () => void }) {
           <p>What each agent may do, how much of its budget it has used, and what is happening right now.</p>
         </div>
         {me.canFreeze && !global && (
-          <button className="btn danger" onClick={freezeAll} disabled={busy}><span aria-hidden="true">❄</span> Kill switch: freeze all agents</button>
+          <button className="btn danger" onClick={() => void freezeAll()} disabled={busy}><span aria-hidden="true">❄</span> Kill switch: freeze all agents</button>
         )}
       </div>
 
       {global && (
         <div className="banner crit" role="alert">
           <span><strong>Kill switch is ON.</strong> Every agent is frozen: all write calls are denied.{global.reason ? ` Reason: ${global.reason}` : ""}</span>
-          {me.canFreeze && <button className="btn" onClick={() => void act("/api/unfreeze")} disabled={busy}>Lift the kill switch</button>}
+          {me.canFreeze && <button className="btn" onClick={() => void act("/api/unfreeze", {}, "Kill switch lifted: agents can write again.")} disabled={busy}>Lift the kill switch</button>}
         </div>
       )}
-      <ErrorBox message={error ?? o.error} />
+      <ErrorBox message={error ?? o.error} onRetry={o.reload} />
       {me.demo && me.role && <DemoTools onDone={() => { o.reload(); onChange(); }} />}
 
       {o.loading && !o.data ? <Spinner /> : null}
@@ -71,14 +75,14 @@ function DemoTools({ onDone }: { onDone: () => void }) {
   return (
     <div className="banner info small">
       <span>Demo mode: the agents' calls below were really decided by the guard, against recorded PayPal data.</span>
-      <button className="btn small" disabled={busy} onClick={async () => { setBusy(true); try { await api("/api/demo/reseed", { body: {} }); onDone(); } finally { setBusy(false); } }}>
+      <button className="btn small" disabled={busy} onClick={async () => { setBusy(true); try { await api("/api/demo/reseed", { body: {} }); onDone(); toast.success("Demo reset: fresh data and held calls."); } catch (e) { toast.error(errorText(e)); } finally { setBusy(false); } }}>
         Reset the demo
       </button>
     </div>
   );
 }
 
-function AgentCardView({ a, canFreeze, busy, act }: { a: AgentCard; canFreeze: boolean; busy: boolean; act: (p: string, b?: object) => Promise<void> }) {
+function AgentCardView({ a, canFreeze, busy, act }: { a: AgentCard; canFreeze: boolean; busy: boolean; act: (p: string, b?: object, done?: string) => Promise<void> }) {
   const m = a.mandate;
   const tone = !m ? "muted" : m.state === "valid" ? (m.daysLeft <= 3 ? "warn" : "good") : "crit";
   return (
@@ -128,9 +132,9 @@ function AgentCardView({ a, canFreeze, busy, act }: { a: AgentCard; canFreeze: b
       {canFreeze && a.frozenScope !== "global" && (
         <div className="row">
           {a.frozen ? (
-            <button className="btn small" disabled={busy} onClick={() => void act("/api/unfreeze", { agentId: a.agentId })}>Unfreeze {a.agentId}</button>
+            <button className="btn small" disabled={busy} onClick={() => void act("/api/unfreeze", { agentId: a.agentId }, `${a.agentId} unfrozen.`)}>Unfreeze {a.agentId}</button>
           ) : (
-            <button className="btn small" disabled={busy} onClick={() => { if (window.confirm(`Freeze ${a.agentId}? All its write calls are denied until you unfreeze it.`)) void act("/api/freeze", { agentId: a.agentId, reason: "Frozen in the dashboard" }); }}>
+            <button className="btn small" disabled={busy} onClick={async () => { if (await confirmDialog({ title: `Freeze ${a.agentId}?`, body: "All its write calls are denied until you unfreeze it. Other agents keep working.", confirmLabel: `Freeze ${a.agentId}`, danger: true })) void act("/api/freeze", { agentId: a.agentId, reason: "Frozen in the dashboard" }, `${a.agentId} is frozen.`); }}>
               ❄ Freeze this agent
             </button>
           )}

@@ -2,6 +2,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { api } from "../api";
 import { Grid, type GridApi, type GridReadyEvent } from "../components/Grid";
+import { toast } from "../components/feedback";
 import { DecisionBadge, ErrorBox, Spinner } from "../components/ui";
 import { DECISION_LABEL, dateTime, toolName } from "../format";
 import { useLoad } from "../hooks";
@@ -57,14 +58,14 @@ export function Audit() {
           <span><strong>The audit log has been modified.</strong> {v.problems.length} problem{v.problems.length === 1 ? "" : "s"}: {v.problems.slice(0, 3).map((p) => `#${p.seq} ${p.problem}`).join(", ")}. Treat every entry after the first problem as untrusted.</span>
         </div>
       )}
-      <ErrorBox message={audit.error ?? verify.error} />
+      <ErrorBox message={audit.error ?? verify.error} onRetry={() => { audit.reload(); verify.reload(); }} />
 
       <section className="card" aria-label="Audit entries">
         <div className="row">
           <input type="search" placeholder="Search every column…" value={quick} onChange={(e) => setQuick(e.target.value)} aria-label="Search the audit log" style={{ maxWidth: 360 }} />
           <span className="spacer" />
           <span className="small muted">{audit.data?.entries.length ?? 0} entries</span>
-          <button className="btn small" onClick={() => apiRef.current?.exportDataAsCsv({ fileName: `payleash-audit-${new Date().toISOString().slice(0, 10)}.csv`, columnKeys: ["seq", "ts", "agent", "tool", "decision", "summary", "paypalResultId", "hash"] })}>Export CSV</button>
+          <button className="btn small" onClick={() => { apiRef.current?.exportDataAsCsv({ fileName: `payleash-audit-${new Date().toISOString().slice(0, 10)}.csv`, columnKeys: ["seq", "ts", "agent", "tool", "decision", "summary", "paypalResultId", "hash"] }); toast.info("Exported what the filters show as CSV."); }}>Export CSV</button>
         </div>
         <Grid<AuditRow>
           rowData={audit.data?.entries ?? []}
@@ -77,7 +78,8 @@ export function Audit() {
           pagination
           paginationPageSize={50}
           paginationPageSizeSelector={[25, 50, 100, 500]}
-          overlayNoRowsTemplate="No audit entries yet."
+          loading={audit.loading && !audit.data}
+          overlayNoRowsTemplate="No audit entries yet. Decisions appear here as agents call PayPal through PayLeash."
         />
         <p className="small muted">Tap a row for details. Sort and filter on any column; Export CSV downloads what you see.</p>
       </section>
@@ -98,8 +100,8 @@ export function Audit() {
                 </ul>
               )}
             </div>
-            <div><h3>Raw reasons (the audit keeps every one)</h3><pre className="json">{JSON.stringify(selected.reasons, null, 2)}</pre></div>
-            <div><h3>Arguments</h3><pre className="json">{JSON.stringify(selected.args, null, 2)}</pre></div>
+            <div><h3>Raw reasons (the audit keeps every one)</h3><pre className="json" tabIndex={0}>{JSON.stringify(selected.reasons, null, 2)}</pre></div>
+            <div><h3>Arguments</h3><pre className="json" tabIndex={0}>{JSON.stringify(selected.args, null, 2)}</pre></div>
             <dl className="facts">
               <dt>Mandate</dt><dd className="mono">{selected.mandateId ?? "none"}</dd>
               <dt>PayPal id</dt><dd className="mono">{selected.paypalResultId ?? "none"}</dd>

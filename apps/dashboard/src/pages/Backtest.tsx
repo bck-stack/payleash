@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, errorText } from "../api";
 import { MoneyBars, RuleBars, WeeklyDecisions } from "../components/Charts";
 import { Grid, type GridApi } from "../components/Grid";
+import { toast } from "../components/feedback";
 import { DecisionBadge, ErrorBox, Spinner, Stat } from "../components/ui";
 import { useApp } from "../context";
 import { dateTime, money, toolName } from "../format";
@@ -65,8 +66,10 @@ export function Backtest() {
       const r = await api<BacktestRun>("/api/backtest/run", { body: { source, mandate: m, sampleOrders: sample, adversarial: attacks } });
       setRun(r);
       setThreshold(r.thresholdDefault ? Number(r.thresholdDefault) : 25);
+      toast.success("Backtest finished: the policy was replayed through the guard.");
     } catch (e) {
       setError(errorText(e));
+      toast.error(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -201,7 +204,7 @@ export function Backtest() {
           <section className="card" aria-label="Every replayed request">
             <div className="row between">
               <h2>Every replayed request</h2>
-              <button className="btn small" onClick={() => gridApi.current?.exportDataAsCsv({ fileName: "payleash-backtest.csv" })}>Export CSV</button>
+              <button className="btn small" onClick={() => { gridApi.current?.exportDataAsCsv({ fileName: "payleash-backtest.csv" }); toast.info("Exported the table as CSV."); }}>Export CSV</button>
             </div>
             <Grid<Row> rowData={rows} columnDefs={cols} onGridReady={(e) => { gridApi.current = e.api; }} getRowId={(p) => p.data.id} pagination paginationPageSize={25} paginationPageSizeSelector={[25, 50, 100]}
               getRowClass={(p: RowClassParams<Row>) => (p.data && p.data.decision !== p.data.baseline ? "changed-row" : undefined)} />

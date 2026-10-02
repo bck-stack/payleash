@@ -22,7 +22,7 @@ export function Login({ me, onDone }: { me: Me; onDone: () => void }) {
   };
 
   return (
-    <div className="login">
+    <main className="login">
       <form className="card" onSubmit={(e) => { e.preventDefault(); void submit(token); }}>
         <div className="row"><span className="brand"><Logo /> PayLeash</span></div>
         <h1>Sign in</h1>
@@ -51,6 +51,6 @@ export function Login({ me, onDone }: { me: Me; onDone: () => void }) {
           </div>
         )}
       </form>
-    </div>
+    </main>
   );
 }

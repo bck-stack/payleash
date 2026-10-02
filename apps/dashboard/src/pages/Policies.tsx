@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, errorText } from "../api";
+import { toast } from "../components/feedback";
 import { ErrorBox, Spinner, copy } from "../components/ui";
 import { useApp } from "../context";
 import { diffLines, fieldChanges, prettyMandate } from "../diff";
@@ -41,6 +42,7 @@ export function Policies() {
     } catch (e) {
       setDraft(null);
       setError(errorText(e));
+      toast.error("Could not draft that policy. Read the message under the box.");
     } finally {
       setBusy(false);
     }
@@ -54,8 +56,10 @@ export function Policies() {
       const r = await api<NonNullable<typeof issued>>("/api/policies/issue", { body: { mandate: draft.proposed, ttl, confirm: true } });
       setIssued(r);
       info.reload();
+      toast.success(`Mandate signed for ${r.mandate.agentId}. Copy the token now: it is shown once.`);
     } catch (e) {
       setError(errorText(e));
+      toast.error(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -153,7 +157,7 @@ export function Policies() {
               <span>{me.role === "demo" ? "The demo account cannot sign mandates." : "The owner key is not on this server (that is the safe setup). Sign it on your own machine:"}</span>
               {me.role !== "demo" && (
                 <>
-                  <pre className="json">{prettyMandate(draft.proposed)}</pre>
+                  <pre className="json" tabIndex={0}>{prettyMandate(draft.proposed)}</pre>
                   <code>{cli}</code>
                   <div className="row"><button className="btn small" onClick={() => void copy(prettyMandate(draft.proposed))}>Copy mandate.json</button><button className="btn small" onClick={() => void copy(cli)}>Copy command</button></div>
                 </>
@@ -181,7 +185,7 @@ export function Policies() {
           {info.data?.agents.map((a) => (
             <div key={a.agentId} className="card flat">
               <div className="row between"><strong>{a.agentId}</strong><span className="small muted">until {dateTime(a.expiresAt)}</span></div>
-              <pre className="json">{prettyMandate(a.current)}</pre>
+              <pre className="json" tabIndex={0}>{prettyMandate(a.current)}</pre>
             </div>
           ))}
         </div>

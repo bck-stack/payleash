@@ -34,4 +34,9 @@ export async function api<T>(path: string, opts: { method?: string; body?: unkno
   return json as T;
 }
 
-export const errorText = (e: unknown): string => (e instanceof ApiError ? [e.message, ...(e.details ?? [])].join(" ") : e instanceof Error ? e.message : String(e));
+export const errorText = (e: unknown): string => {
+  if (e instanceof ApiError) return [e.message, ...(e.details ?? [])].join(" ");
+  // fetch() rejects with a bare TypeError when the server cannot be reached at all (offline, or a sleeping free host).
+  if (e instanceof TypeError) return "Cannot reach the PayLeash server. Check your connection; if this is the hosted demo, it may be waking up (about 30 seconds). Then try again.";
+  return e instanceof Error ? e.message : String(e);
+};
