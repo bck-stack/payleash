@@ -1,0 +1,29 @@
+name: Demo uptime
+
+# Pings the hosted judges' demo every 10 minutes. That does two jobs: it tells you (a red run, an email from GitHub)
+# when the demo is down, and it keeps Render's free service from falling asleep between visits.
+# Set the repository variable DEMO_URL (Settings -> Secrets and variables -> Actions -> Variables) to the demo's address.
+# Until it is set this workflow does nothing. GitHub pauses scheduled workflows after 60 days without repository activity.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the hosted demo
+        env:
+          DEMO_URL: ${{ vars.DEMO_URL }}
+        run: |
+          if [ -z "$DEMO_URL" ]; then echo "DEMO_URL is not set: nothing to check."; exit 0; fi
+          node scripts/uptime/check.mjs "$DEMO_URL"

@@ -21,7 +21,8 @@
     "build:dashboard": "pnpm --filter @payleash/dashboard build",
     "demo": "pnpm build && pnpm build:dashboard && node packages/proxy/dist/bin.js --transport http --demo --dashboard apps/dashboard/dist",
     "screenshots": "pnpm --filter @payleash/screenshots start",
-    "demo:agents": "pnpm build && pnpm build:dashboard && pnpm --filter @payleash/demo-agents start"
+    "demo:agents": "pnpm build && pnpm build:dashboard && pnpm --filter @payleash/demo-agents start",
+    "demo:check": "node scripts/uptime/check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

@@ -1,6 +1,8 @@
 # Render blueprint: one free web service that runs the PayLeash proxy in demo mode and serves the dashboard.
 # Demo mode needs no PayPal credentials: PayPal is simulated with recorded responses, keys and database are throw-away
 # (the free tier has no persistent disk), and a read-only demo login is available for visitors.
+# No PayPal variable is set on purpose: --demo never contacts PayPal, and refuses to start if PAYPAL_BASE_URL is not the sandbox.
+# Exact steps: docs/DEPLOY-RENDER.md
 # https://render.com/docs/blueprint-spec
 services:
   - type: web
@@ -22,6 +24,11 @@ services:
         value: judge-demo-2026
       - key: PAYLEASH_DEMO_SHOW
         value: "1"
+      # The demo wipes itself and re-seeds every night at 03:00 UTC (audit log, approvals, budgets, everything visitors did).
+      - key: PAYLEASH_DEMO_NIGHTLY_RESET
+        value: "1"
+      - key: PAYLEASH_DEMO_RESET_HOUR_UTC
+        value: "3"
       # Render terminates TLS: trust X-Forwarded-Proto for the Secure cookie and X-Forwarded-For for the login throttle.
       - key: PAYLEASH_TRUST_PROXY
         value: "1"

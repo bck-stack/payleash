@@ -1,0 +1,11 @@
+{
+  "name": "@payleash/uptime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A tiny uptime self-check for the hosted demo (no dependencies)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "node check.mjs"
+  }
+}

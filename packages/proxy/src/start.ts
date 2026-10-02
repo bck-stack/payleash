@@ -1,5 +1,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { ProxyOptions } from "./config.js";
+import { scheduleNightlyReset } from "./demo.js";
 import { startHttp, type RunningHttp } from "./http.js";
 import { buildProxy, demoOwnerTokenFallback, stdioMandateToken, type ProxyOverrides, type ProxyRuntime } from "./runtime.js";
 import { createMcpServer } from "./server.js";
@@ -24,10 +25,16 @@ export async function startProxy(opts: ProxyOptions, env: NodeJS.ProcessEnv = pr
   }
   const rt = buildProxy(opts, env, overrides);
   let http: RunningHttp | undefined;
+  let cancelNightly: (() => void) | undefined;
 
   try {
     if (rt.demo) {
       await rt.demo.reseed({ activity: opts.demoActivity !== false });
+      if (env.PAYLEASH_DEMO_NIGHTLY_RESET === "1") {
+        const hour = Number(env.PAYLEASH_DEMO_RESET_HOUR_UTC ?? "3");
+        cancelNightly = scheduleNightlyReset(rt, { hourUtc: Number.isInteger(hour) && hour >= 0 && hour < 24 ? hour : 3, log });
+        log(`the demo resets itself every night at ${String(Number.isInteger(hour) && hour >= 0 && hour < 24 ? hour : 3).padStart(2, "0")}:00 UTC (next: ${rt.demoStatus?.nextResetAt})`);
+      }
       log(`DEMO MODE: recorded PayPal, throw-away keys, in-memory database. ${rt.approvals.countPending()} held calls are waiting in the dashboard.${rt.demoToken ? " A read-only demo login is enabled (PAYLEASH_DEMO_TOKEN)." : ""}`);
     }
     if (opts.transport === "http") {
@@ -46,6 +53,7 @@ export async function startProxy(opts: ProxyOptions, env: NodeJS.ProcessEnv = pr
       log(`MCP over stdio for agent "${session.mandate.agentId}", ${rt.tools.length} PayPal tools, mode=${rt.mode}`);
     }
   } catch (e) {
+    cancelNightly?.();
     await http?.close();
     rt.close();
     throw e;
@@ -55,6 +63,7 @@ export async function startProxy(opts: ProxyOptions, env: NodeJS.ProcessEnv = pr
     runtime: rt,
     http,
     close: async () => {
+      cancelNightly?.();
       await http?.close();
       rt.close();
     },

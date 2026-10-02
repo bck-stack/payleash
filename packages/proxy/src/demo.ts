@@ -93,3 +93,98 @@ export async function seedDemo(rt: ProxyRuntime, o: { activity?: boolean } = {})
     await rt.app.handleWrite(billing, "send_invoice", { invoice_id: I.invoiceSmall, additional_recipients: ["stranger@example.net"] });
   });
 }
+
+/** What the health endpoint and the dashboard can say about the demo's housekeeping. */
+export interface DemoStatus {
+  startedAt: string;
+  lastResetAt: string;
+  nextResetAt: string | null;
+  resets: number;
+}
+
+const AUDIT_TRIGGERS = `
+  CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log
+    BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+  CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log
+    BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;`;
+
+/**
+ * Wipes a DEMO database back to day zero and seeds it again: audit log (the append-only triggers are dropped and
+ * recreated around the delete, which is why this exists only for the throw-away in-memory demo), approvals, budgets,
+ * freezes, step-up replay records, mandates and everything the agents registered as untrusted.
+ */
+export async function resetDemo(rt: ProxyRuntime): Promise<void> {
+  if (!rt.demo) throw new Error("resetDemo is only for --demo");
+  rt.db.transaction(() => {
+    rt.db.exec("DROP TRIGGER IF EXISTS audit_log_no_update; DROP TRIGGER IF EXISTS audit_log_no_delete;");
+    rt.db.exec("DELETE FROM audit_log;");
+    rt.db.exec(AUDIT_TRIGGERS);
+    for (const table of ["approvals", "spend_ledger", "freeze", "stepup_used", "mandates"]) rt.db.exec(`DELETE FROM ${table};`);
+  })();
+  rt.registries.clear();
+  await seedDemo(rt, { activity: rt.demoActivity !== false });
+}
+
+/** Milliseconds from `now` until the next `hourUtc`:00 UTC (always in the future). */
+export function msUntilNextHourUtc(now: Date, hourUtc: number): number {
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0, 0));
+  if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
+/** Resets the demo every night at `hourUtc` (default 03:00 UTC). Returns a function that cancels the schedule. */
+export function scheduleNightlyReset(rt: ProxyRuntime, o: { hourUtc?: number; log?: (line: string) => void } = {}): () => void {
+  const hour = o.hourUtc ?? 3;
+  let timer: NodeJS.Timeout | undefined;
+  let stopped = false;
+  const arm = () => {
+    const wait = msUntilNextHourUtc(rt.now(), hour);
+    if (rt.demoStatus) rt.demoStatus.nextResetAt = new Date(rt.now().getTime() + wait).toISOString();
+    // Timers longer than ~24.8 days overflow; a day is far below that.
+    timer = setTimeout(() => void run(), wait);
+    timer.unref();
+  };
+  const run = async () => {
+    if (stopped) return;
+    try {
+      await resetDemo(rt);
+      if (rt.demoStatus) {
+        rt.demoStatus.lastResetAt = rt.now().toISOString();
+        rt.demoStatus.resets += 1;
+      }
+      o.log?.("nightly demo reset done");
+    } catch (e) {
+      o.log?.(`nightly demo reset FAILED: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (!stopped) arm();
+  };
+  arm();
+  return () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+  };
+}
+
+const PAYPAL_HOST = /(^|\.)paypal(objects)?\.com$/i;
+const GUARD = Symbol.for("payleash.paypalEgressGuard");
+
+/**
+ * In `--demo` nothing may reach PayPal, whatever the environment says. Fixtures already mean no code path calls it;
+ * this is the second lock: any `fetch` to a PayPal host from this process throws.
+ */
+export function blockPayPalEgress(): void {
+  const real = globalThis.fetch;
+  if ((real as unknown as Record<symbol, boolean>)[GUARD]) return;
+  const guard = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    let host = "";
+    try {
+      host = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url).hostname;
+    } catch {
+      /* relative or malformed: let fetch complain */
+    }
+    if (PAYPAL_HOST.test(host)) return Promise.reject(new Error(`blocked: this is a demo server and may not reach ${host}`));
+    return real(input, init);
+  }) as typeof fetch;
+  (guard as unknown as Record<symbol, boolean>)[GUARD] = true;
+  globalThis.fetch = guard;
+}

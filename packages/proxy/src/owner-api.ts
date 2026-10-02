@@ -314,6 +314,7 @@ export function createOwnerApi(rt: ProxyRuntime): OwnerApi {
         role,
         mode: rt.mode,
         demo: inFixtureMode(),
+        ...(rt.demoStatus ? { demoReset: { next: rt.demoStatus.nextResetAt } } : {}),
         loginEnabled: !!rt.sessions,
         demoLoginAvailable: !!rt.demoToken,
         // The demo passcode is public by design (it only opens a read-only account on recorded data); the operator opts in to showing it.
@@ -500,6 +501,7 @@ export function createOwnerApi(rt: ProxyRuntime): OwnerApi {
     const write = (event: string, data: unknown) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     const tick = () => {
       try {
+        if (rt.audit.head().seq < last) last = 0; // the demo was reset overnight: the sequence starts again
         for (const e of rt.audit.page({ afterSeq: last, limit: 100 })) {
           write("audit", auditRow(e));
           last = e.seq;
