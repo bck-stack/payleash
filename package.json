@@ -5,14 +5,19 @@
   "description": "PayLeash: the trust layer for AI agents in the merchant back office on PayPal",
   "license": "MIT",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -p tsconfig.check.json",
     "lint": "eslint .",
     "test": "vitest run",
-    "seed": "pnpm --filter @payleash/seed-sandbox start"
+    "seed": "pnpm --filter @payleash/seed-sandbox start",
+    "smoke": "pnpm --filter @payleash/smoke start",
+    "payleash": "node packages/core/dist/bin.js",
+    "proxy": "node packages/proxy/dist/bin.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
