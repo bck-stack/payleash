@@ -7,3 +7,4 @@ export * from "./db.js";
 export * from "./policy/index.js";
 export * from "./paypal/index.js";
 export * from "./taint/index.js";
+export * from "./audit/index.js";

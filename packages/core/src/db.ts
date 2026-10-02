@@ -37,6 +37,26 @@ const MIGRATIONS: string[] = [
     expires_at  INTEGER NOT NULL
   );
   `,
+  // 2: tamper-evident audit log (see audit/)
+  `
+  CREATE TABLE audit_log (
+    seq              INTEGER PRIMARY KEY,
+    ts               TEXT    NOT NULL,
+    agent            TEXT    NOT NULL,
+    tool             TEXT    NOT NULL,
+    args             TEXT    NOT NULL,   -- canonical JSON
+    decision         TEXT    NOT NULL,
+    reasons          TEXT    NOT NULL,   -- canonical JSON
+    mandate_id       TEXT,
+    paypal_result_id TEXT,
+    prev_hash        TEXT    NOT NULL,
+    hash             TEXT    NOT NULL UNIQUE
+  );
+  CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log
+    BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+  CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log
+    BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+  `,
 ];
 
 export function migrate(db: Db): void {

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { defaultKeyDir, initKeys, loadPrivateKey, loadPublicKey } from "./keys.js";
+import { AuditLog } from "./audit/index.js";
 import { openDb, resolveDbPath } from "./db.js";
 import { issueMandate, verifyMandate } from "./mandate/index.js";
 import { SqlitePolicyStore } from "./policy/index.js";
@@ -27,6 +28,10 @@ const USAGE = `payleash <command>
   freeze [--agent ID] [--reason TEXT]               kill switch: deny every write tool (globally, or for one agent)
   unfreeze [--agent ID]                             lift a freeze
   status [--agent ID]                               show freeze state and 24h budgets
+
+  audit verify [--db PATH] [--head HASH]            recompute the audit hash chain; exit 1 if anything was tampered with
+  audit head [--db PATH]                            print "seq hash" of the newest entry (record it elsewhere to detect truncation)
+  audit tail [--db PATH] [-n 20]                    show the newest entries
 
 The database path comes from PAYLEASH_DB_PATH (default ./payleash.db).
 `;
@@ -83,6 +88,42 @@ registerCommand("mandate verify", async (args, io) => {
   const dir = values["key-dir"] ?? defaultKeyDir(io.env);
   const mandate = await verifyMandate(token, loadPublicKey(dir, "owner"));
   io.out(JSON.stringify(mandate, null, 2));
+  return 0;
+});
+
+const withAudit = <T>(io: CliIo, dbPath: string | undefined, fn: (log: AuditLog) => T): T => {
+  const db = openDb(dbPath ?? resolveDbPath(io.env));
+  try {
+    return fn(new AuditLog(db));
+  } finally {
+    db.close();
+  }
+};
+
+registerCommand("audit verify", async (args, io) => {
+  const { values } = parseArgs({ args, options: { db: { type: "string" }, head: { type: "string" } } });
+  const r = withAudit(io, values.db, (log) => log.verify({ expectedHead: values.head }));
+  if (r.ok) {
+    io.out(`audit log OK: ${r.entries} entries, head #${r.headSeq} ${r.headHash}`);
+    return 0;
+  }
+  io.err(`AUDIT LOG TAMPERING DETECTED (${r.problems.length} problem${r.problems.length === 1 ? "" : "s"}):`);
+  for (const p of r.problems) io.err(`  #${p.seq} ${p.problem}: ${p.message}`);
+  return 1;
+});
+
+registerCommand("audit head", async (args, io) => {
+  const { values } = parseArgs({ args, options: { db: { type: "string" } } });
+  const h = withAudit(io, values.db, (log) => log.head());
+  io.out(`${h.seq} ${h.hash}`);
+  return 0;
+});
+
+registerCommand("audit tail", async (args, io) => {
+  const { values } = parseArgs({ args, options: { db: { type: "string" }, n: { type: "string", short: "n" } } });
+  for (const e of withAudit(io, values.db, (log) => log.entries({ limit: Number(values.n ?? 20) }))) {
+    io.out(`#${e.seq} ${e.ts} ${e.agent} ${e.tool} ${e.decision}${e.paypalResultId ? ` -> ${e.paypalResultId}` : ""}`);
+  }
   return 0;
 });
 
