@@ -7,8 +7,9 @@ export const GENESIS_HASH = "0".repeat(64);
 /**
  * What happened. `allow | hold | deny` are the pipeline's decisions; the rest record what followed.
  * A call that was allowed gets a second entry (`executed` / `execution_failed`) carrying the PayPal result id.
+ * `approve` / `reject` are owner decisions on held calls; `freeze` / `unfreeze` are kill-switch actions.
  */
-export type AuditDecision = "allow" | "hold" | "deny" | "approve" | "reject" | "executed" | "execution_failed";
+export type AuditDecision = "allow" | "hold" | "deny" | "approve" | "reject" | "executed" | "execution_failed" | "freeze" | "unfreeze";
 
 export interface AuditEntryInput {
   agent: string;
