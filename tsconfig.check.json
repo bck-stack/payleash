@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "paths": {
+      "@payleash/core": ["./packages/core/src/index.ts"],
+      "@payleash/proxy": ["./packages/proxy/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/*/src",
+    "packages/*/test",
+    "scripts/*/src",
+    "scripts/*/test",
+    "apps/*/src",
+    "vitest.config.ts",
+    "eslint.config.js"
+  ]
+}
