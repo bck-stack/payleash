@@ -4,8 +4,10 @@ import type { AddressInfo } from "node:net";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { ApprovalError } from "./app.js";
+import { createOwnerApi } from "./owner-api.js";
 import type { ProxyRuntime } from "./runtime.js";
 import { createMcpServer } from "./server.js";
+import { serveDashboard } from "./static.js";
 
 const MAX_BODY = 1_000_000;
 const MAX_SESSIONS = 200;
@@ -41,6 +43,8 @@ export interface HttpOptions {
   port: number;
   /** Serve the MCP endpoint at /mcp. Off when MCP runs over stdio. */
   mcp: boolean;
+  /** Built dashboard to serve at /. */
+  dashboardDir?: string;
 }
 
 export interface RunningHttp {
@@ -57,10 +61,13 @@ export interface RunningHttp {
  *   POST /freeze, /unfreeze  owner: kill switch, {"agentId"?, "reason"?}
  *   GET  /audit/verify       owner: recompute the audit chain
  *   GET  /healthz
+ *   /api/*                   dashboard API: session cookie (login with the owner token) or the owner token as bearer
+ *   /                        the built dashboard, when `dashboardDir` is set
  * Owner endpoints need `Authorization: Bearer $PAYLEASH_OWNER_TOKEN` and are disabled when it is unset.
  */
 export async function startHttp(rt: ProxyRuntime, o: HttpOptions): Promise<RunningHttp> {
   const { app } = rt;
+  const api = createOwnerApi(rt);
   const sessions = new Map<string, { transport: StreamableHTTPServerTransport; mandateToken: string }>();
 
   const ownerOnly = (req: IncomingMessage, res: ServerResponse): boolean => {
@@ -115,6 +122,9 @@ export async function startHttp(rt: ProxyRuntime, o: HttpOptions): Promise<Runni
 
     if (path === "/healthz" && req.method === "GET") return send(res, 200, { ok: true, mode: rt.mode, tools: rt.tools.length });
     if (path === "/mcp" && o.mcp) return handleMcp(req, res);
+    if (await api.handle(req, res, url, path)) return;
+    // A browser opening /approvals (a link from a notification, a reload) wants the page, not the owner API's JSON of the same name.
+    if (o.dashboardDir && req.method === "GET" && /text\/html/.test(String(req.headers.accept ?? "")) && !bearer(req) && serveDashboard(o.dashboardDir, req, res, path)) return;
 
     const m = /^\/approvals\/([A-Za-z0-9_-]+)$/.exec(path);
     if (path === "/approvals" && req.method === "GET") {
@@ -145,6 +155,7 @@ export async function startHttp(rt: ProxyRuntime, o: HttpOptions): Promise<Runni
       if (!ownerOnly(req, res)) return;
       return send(res, 200, app.verifyAudit(url.searchParams.get("head") ?? undefined));
     }
+    if (o.dashboardDir && serveDashboard(o.dashboardDir, req, res, path)) return;
     send(res, 404, { error: "not found" });
   }
 

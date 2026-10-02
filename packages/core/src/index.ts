@@ -9,3 +9,7 @@ export * from "./paypal/index.js";
 export * from "./taint/index.js";
 export * from "./audit/index.js";
 export * from "./guard.js";
+export * from "./reasons.js";
+export * from "./describe.js";
+export * from "./backtest/index.js";
+export * from "./vapid.js";

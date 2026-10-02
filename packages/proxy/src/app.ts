@@ -6,13 +6,18 @@ import {
   SqlitePolicyStore,
   callHash,
   formatMinor,
+  buildCallContext,
+  groupReasons,
   mintStepUp,
   parseDecimal,
+  reasonInfo,
   verifyMandate,
   type Authorization,
+  type CallContext,
+  type HumanReason,
   type Mandate,
   type PayPalReader,
-  type Reason,
+  type ReasonInfo,
 } from "@payleash/core";
 import type { Approval } from "./approvals.js";
 import { ApprovalStore } from "./approvals.js";
@@ -31,6 +36,8 @@ export interface ProxyAppDeps {
   approvalTtlMs?: number;
   now?: () => Date;
   log?: (line: string) => void;
+  /** Called once for each NEW held call (not for an agent's retry of the same call): push / email notifications. */
+  onHold?: (held: { approval: Approval; owner: OwnerApprovalView }) => void;
 }
 
 export interface Session {
@@ -71,11 +78,22 @@ export interface ApprovalView {
   status: "pending_approval" | "approving" | "executed" | "failed" | "denied" | "expired";
   approvalId: string;
   tool: string;
-  reasons: Reason[];
+  reasons: HumanReason[];
   explanation: string;
   expiresAt: string;
   result?: unknown;
   error?: string;
+}
+
+/** What the dashboard shows for one approval. The agent never sees this richer view. */
+export interface OwnerApprovalView extends Omit<ApprovalView, "reasons"> {
+  agentId: string;
+  args: Record<string, unknown>;
+  createdAt: string;
+  decidedAt?: string;
+  reasons: (HumanReason & ReasonInfo)[];
+  /** Plain-language summary, PayPal facts and the provenance of each argument. */
+  context?: CallContext;
 }
 
 const viewStatus = (s: Approval["status"]): ApprovalView["status"] => (s === "pending" ? "pending_approval" : s);
@@ -104,8 +122,9 @@ export class ProxyApp {
     const auth = await this.d.guard.authorize({ mandateToken: session.mandateToken, tool, args });
 
     if (auth.decision === "deny") {
-      this.log(`deny ${session.mandate.agentId} ${tool}: ${auth.reasons.map((r) => r.code).join(",")}`);
-      return json({ status: "denied", reasons: auth.reasons, explanation: auth.explanation }, true);
+      this.log(`deny ${session.mandate.agentId} ${tool}: ${[...new Set(auth.reasons.map((r) => r.code))].join(",")}`);
+      // People (and agents) see one row per reason code; the audit log keeps every raw reason.
+      return json({ status: "denied", reasons: groupReasons(auth.reasons), explanation: auth.explanation }, true);
     }
 
     if (auth.decision === "hold") {
@@ -119,9 +138,17 @@ export class ProxyApp {
         reasons: auth.reasons,
         explanation: auth.explanation,
         ttlMs: this.d.approvalTtlMs ?? 60 * 60 * 1000,
+        context: buildCallContext({ tool, args, assessments: auth.args, facts: auth.facts, truth: auth.truth, now: this.now() }),
       });
       this.log(`hold ${session.mandate.agentId} ${tool} -> ${approval.id}${reused ? " (existing)" : ""}`);
-      return json({ status: "pending_approval", approvalId: approval.id, reasons: auth.reasons, explanation: auth.explanation });
+      if (!reused) {
+        try {
+          this.d.onHold?.({ approval, owner: this.ownerView(approval) });
+        } catch (e) {
+          this.log(`notification failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      return json({ status: "pending_approval", approvalId: approval.id, reasons: groupReasons(auth.reasons), explanation: auth.explanation });
     }
 
     const { outcome: _outcome, ...result } = await this.execute(auth, tool, args);
@@ -208,7 +235,7 @@ export class ProxyApp {
       status: viewStatus(a.status),
       approvalId: a.id,
       tool: a.tool,
-      reasons: a.reasons,
+      reasons: groupReasons(a.reasons),
       explanation: a.explanation,
       expiresAt: new Date(a.expiresAtMs).toISOString(),
       ...(a.result !== undefined ? { result: a.result } : {}),
@@ -243,7 +270,7 @@ export class ProxyApp {
       const auth = await this.d.guard.authorize({ mandateToken, tool: a.tool, args: a.args, stepUpToken });
       if (auth.decision !== "allow") {
         // The world changed since the hold (frozen, mandate expired, PayPal balance moved): the approval does not override hard rules.
-        const error = `Not executed after approval: ${auth.reasons.map((r) => r.message).join(" ")}`;
+        const error = `Not executed after approval: ${groupReasons(auth.reasons).map((r) => r.message).join(" ")}`;
         this.d.approvals.settle(approvalId, "failed", { error });
         return withArgs(this.view(this.d.approvals.get(approvalId)!));
       }
@@ -254,6 +281,24 @@ export class ProxyApp {
       this.d.approvals.settle(approvalId, "failed", { error: e instanceof Error ? e.message : String(e) });
     }
     return withArgs(this.view(this.d.approvals.get(approvalId)!));
+  }
+
+  ownerView(a: Approval): OwnerApprovalView {
+    const { reasons: _r, ...base } = this.view(a);
+    return {
+      ...base,
+      agentId: a.agentId,
+      args: a.args,
+      createdAt: new Date(a.createdAtMs).toISOString(),
+      ...(a.decidedAtMs ? { decidedAt: new Date(a.decidedAtMs).toISOString() } : {}),
+      reasons: groupReasons(a.reasons).map((r) => ({ ...r, ...reasonInfo(r.code) })),
+      ...(a.context ? { context: a.context } : {}),
+    };
+  }
+
+  /** Newest first. `status` narrows; with none, everything the store keeps. */
+  listOwnerApprovals(status?: Approval["status"]): OwnerApprovalView[] {
+    return this.d.approvals.list(status).map((a) => this.ownerView(a));
   }
 
   listApprovals(status?: Approval["status"]): ApprovalView[] {

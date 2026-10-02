@@ -5,9 +5,12 @@
 Signed operation mandates, a deterministic provenance firewall against prompt injection, policy backtesting on past
 transactions, and one-tap human approval with a kill switch. Built for the PayPal AI Hackathon (2026). Sandbox only.
 
-> Status: **core v0**. Mandates, policy, the provenance firewall, the audit log, the MCP proxy and the sandbox seed
-> script are built and tested (200+ tests, run in CI). The dashboard, the backtest and the demo agents come next
-> (`apps/` holds placeholders). Not yet exercised against the live sandbox: see `docs/SMOKE-TEST.md`.
+> Status: **core + dashboard**. Mandates, policy, the provenance firewall, the audit log, the MCP proxy, the owner
+> dashboard (approvals, kill switch, plain-language policies, audit, backtest) and the backtest engine are built and tested
+> (300+ tests, run in CI). The first live run against the PayPal sandbox passed all six smoke checks
+> (`docs/SMOKE-TEST.md`). The demo agents come next (`apps/demo-agents` is a placeholder).
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/bck-stack/payleash)
 
 ## The problem
 
@@ -33,15 +36,15 @@ PayLeash is that layer. It is an MCP server that sits between the agent and the 
 | --- | --- | --- | --- |
 | 1 | **Signed, scoped mandates** (`core/mandate`) | The owner signs (Ed25519 JWS) what an agent may do: allowed tools, max amount per operation, rolling daily total, currency, "payee must be the original buyer", order age window, auto-approve threshold, validity window. Holding the mandate is the agent's only credential. A held call becomes a single-use **step-up mandate**, bound to the SHA-256 of that one call (tool + canonical arguments), when the owner approves it. | built |
 | 2 | **Provenance firewall** (`core/taint`) | Untrusted text (emails, tickets, web pages) is registered with its source. For every money-moving call the critical arguments (amount, currency, payee, capture / order / invoice / dispute / subscription id, invoice recipients) are checked against **PayPal's own records** and marked `verified`, `tainted` (only in untrusted text, not in PayPal) or `unknown`. Pure rules, no LLM in the decision. | built |
-| 3 | **Policy and backtesting** (`core/policy`) | A deterministic `allow / hold / deny` evaluator with rolling budgets in SQLite and a global / per-agent kill switch. Backtesting a policy on past transactions is the next session; the 90-day history it needs already exists as fixtures. | policy built, backtest next |
-| 4 | **Human approval and kill switch** (`packages/proxy`) | Held calls return `pending_approval`. The owner approves or denies with one authenticated request; approval mints the step-up mandate and runs the call. A freeze denies every write tool at once. Every decision lands in a hash-chained audit log. | API built, dashboard next |
+| 3 | **Policy and backtesting** (`core/policy`, `core/backtest`) | A deterministic `allow / hold / deny` evaluator with rolling budgets in SQLite and a global / per-agent kill switch. The backtest replays 90 days of history (or the fixtures) through the same guard in dry-run mode and reports what would run, wait or be denied; a slider re-runs only the policy. | built |
+| 4 | **Human approval and kill switch** (`packages/proxy`, `apps/dashboard`) | Held calls return `pending_approval`. The owner approves or denies in the dashboard with one tap; approval mints the step-up mandate and runs the call. A freeze denies every write tool at once. Every decision lands in a hash-chained audit log. | built |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     subgraph AG["Agent side"]
-        A["AI agent<br/>Claude Desktop or any MCP client"]
+        A["AI agent<br/>any MCP client"]
         U["Untrusted text<br/>emails, tickets, web"]
     end
 
@@ -103,12 +106,12 @@ export PAYLEASH_OWNER_TOKEN="$(openssl rand -hex 24)"   # your credential for ap
 export PAYLEASH_DB_PATH="$PWD/payleash.db"
 
 # 4. Run the proxy.
-pnpm proxy --transport stdio            # for Claude Desktop and other stdio clients
+pnpm proxy --transport stdio            # for desktop MCP clients and other stdio clients
 pnpm proxy --transport http --port 8787 # streamable HTTP at /mcp; owner API on the same port
 pnpm proxy --fixtures ...               # no credentials: PayPal simulated with recorded responses
 ```
 
-**Claude Desktop** (`claude_desktop_config.json`, absolute paths):
+**A desktop MCP client** (a `mcpServers` entry in its config file, absolute paths):
 
 ```json
 {
@@ -137,10 +140,111 @@ curl -s -X POST localhost:8787/approvals/<id> -H "Authorization: Bearer $PAYLEAS
 curl -s -X POST localhost:8787/freeze -H "Authorization: Bearer $PAYLEASH_OWNER_TOKEN" -d '{"reason":"incident"}'   # all agents
 pnpm payleash freeze --agent support-agent     # or from the CLI, straight in the database
 pnpm payleash audit verify                     # recompute the audit hash chain; exit 1 if tampered with
+pnpm payleash paypal refresh-token             # PayPal caches the access token ~9 h: run this after changing the app's permissions
 ```
+
+The same API, behind a session cookie, powers the dashboard (`/api/*`).
 
 Then run the real checks with `docs/SMOKE-TEST.md`. To fill your sandbox with demo data: `pnpm seed`
 ([details](scripts/seed-sandbox/README.md)).
+
+## Try the dashboard
+
+![Overview: agent cards, budgets, kill switch, live activity](docs/screenshots/overview.png)
+
+The dashboard is a React app that the proxy serves next to its owner API, so there is one process to run and one URL to open.
+
+```bash
+pnpm install
+pnpm demo                 # builds everything, then starts the proxy in demo mode on http://127.0.0.1:8787
+```
+
+`pnpm demo` needs no PayPal credentials, no keys and no database. PayPal is simulated with recorded responses, two agents
+(`support-agent`, `billing-agent`) get mandates signed with throw-away keys, and the real guard decides a handful of
+calls: one runs, five are held for you, two are denied (including a prompt injection). The terminal prints a random owner
+token; sign in with it, or use the read-only demo account below. A sandbox setup uses the same dashboard:
+
+```bash
+pnpm build && pnpm build:dashboard
+export PAYLEASH_OWNER_TOKEN="$(openssl rand -hex 24)"      # your login (plus the keys / PayPal variables from the Quickstart)
+pnpm proxy --transport http --dashboard apps/dashboard/dist
+```
+
+Development with hot reload: `pnpm proxy --transport http --demo` in one terminal, `pnpm --filter @payleash/dashboard dev`
+in another (it proxies `/api` to port 8787).
+
+| Page | What it does |
+| --- | --- |
+| **Overview** | One card per agent: mandate validity, rolling 24 h budget bar (used / limit), today's ran / held / denied. A global **kill switch**, a per-agent freeze, and a **live activity feed** (server-sent events). |
+| **Approvals** | Held calls in plain language (*"Refund $60.00 on order 7GH2…, captured $100.00, $30.00 already refunded, buyer bob@example.com"*), a table of **where each value came from** (PayPal-verified, customer email, ticket, dispute message, unknown), the rules that fired with what they mean and what to do, and one-tap **Approve / Deny**, built mobile-first. Approval mints the single-use step-up mandate, as before. |
+| **Policies** | Write *"Support agent may refund up to $100 per order, at most $300 a day, automatically up to $25; only orders from the last 60 days"*. A language model (OpenAI-compatible, Cloudflare Workers AI by default: `CF_ACCOUNT_ID` / `CF_API_TOKEN`) or, without one, a rule-based parser turns it into mandate JSON. The draft is validated strictly (unknown keys, unknown tools, and any amount or tool that is not in your own sentence are rejected), shown **side by side with the current mandate**, and signed with the owner key **only after you confirm**. It is never signed automatically. |
+| **Audit** | The hash-chained log in **AG Grid Community**, with a **Chain verified ✓ / TAMPERED ✗** badge from `audit verify`. |
+| **Backtest** | The policy replayed on 90 days of history. See below. |
+
+![Approvals on a phone](docs/screenshots/approvals-mobile.png)
+
+**Why held calls look the way they do.** The firewall marks every critical value `verified` (PayPal confirms it), `tainted`
+(it appears only in untrusted text) or `unknown`, and the dashboard shows that map. A card-paid sandbox order has no payer
+email at PayPal, so a call that *names a payee* on it is held as `payee_unverifiable`; the dashboard says why in plain words.
+Refunds that name no payee are not affected (PayPal always refunds the original payment source).
+
+### How AG Grid is used
+
+Both data-heavy views run on [AG Grid Community](https://www.ag-grid.com/) (MIT, no enterprise modules):
+
+* **Audit** (`apps/dashboard/src/pages/Audit.tsx`): every audit entry is a row (up to 2000 loaded, paginated). Each column
+  sorts and has a floating filter, a quick-search box filters across all columns, the decision column uses a custom cell
+  renderer (icon + word, never colour alone), and **Export CSV** downloads exactly what the filters show. Clicking a row opens
+  the full detail: parsed arguments, every raw reason (the audit keeps all of them even where people see one row per code),
+  the mandate id, the PayPal result id and the hash chain links. The *Chain verified / TAMPERED* badge comes from the
+  server recomputing the SHA-256 chain.
+* **Backtest** (`apps/dashboard/src/pages/Backtest.tsx`): every replayed request is a row. Moving the what-if slider re-runs
+  the policy on the server and the grid updates in place: the *Outcome* column follows the slider, the *With current
+  limit* column keeps the baseline, and rows that moved are highlighted.
+* The theme (`apps/dashboard/src/components/Grid.tsx`) follows the page's light / dark setting.
+
+### Backtest
+
+![Backtest: what-if slider, outcomes, charts and the replayed requests in AG Grid](docs/screenshots/backtest.png)
+
+`packages/core/src/backtest` replays history through the same guard (mandate, kill switch, provenance firewall, policy,
+budget) on an in-memory database with an ephemeral key and a PayPal reader fed from recorded history. There is no executor
+in that path and no network use: a test stubs `fetch` to throw and the replay still completes.
+
+* **Input:** the offline 90-day fixtures (`scripts/seed-sandbox/fixtures/backtest-history.json`, 200 orders, plus 3 disputes),
+  because sandbox orders cannot be backdated; or real data from PayPal Transaction Search
+  (`/v1/reporting/transactions`, last 90 days in 31-day windows) and Disputes, read with GET only.
+* **Synthesised actions:** refund requests derived from the history's refunds and disputes, *sampled* customer requests (clearly
+  labelled, adjustable, they only give the replay volume), and injected cases: prompt injections (a classic one, an amount only
+  a ticket asserts, an invented capture id, a redirected payee, and any injection found in a dispute message), an over-limit
+  request, a refund on an old order, a burst that drains the daily total, and a double refund.
+* **Report:** how many actions would run automatically, wait for you or be denied; money moved automatically versus held; per-rule hit counts;
+  injection attempts caught; three charts; and the **"if your threshold were $X"** slider, which re-runs only the policy,
+  in memory. With no change it reproduces the guard's own decisions exactly (a test asserts it).
+* From the terminal: `pnpm payleash backtest --mandate examples/mandate.support-agent.json [--threshold 50]`.
+
+### Deploy it on Render (free tier)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/bck-stack/payleash)
+
+`render.yaml` defines one free web service that builds the repo and runs `payleash-proxy --demo` with the dashboard.
+It needs nothing from you except a click. After the first deploy:
+
+1. **Your login:** open the service on Render, *Environment*, and read `PAYLEASH_OWNER_TOKEN` (Render generated it).
+2. **Visitors and judges:** the login page offers *Enter the read-only demo* (the public passcode `judge-demo-2026`,
+   set in `render.yaml`). That account sees everything and can approve or deny only the seeded demo calls, which run on
+   recorded data. It cannot freeze agents, sign mandates, subscribe to alerts or read live PayPal data.
+3. **Optional, language model for policies:** set `CF_ACCOUNT_ID` and `CF_API_TOKEN` (a Cloudflare Workers AI token). Without them the
+   rule-based parser handles common sentences.
+4. **Optional, phone alerts (Web Push):** `pnpm payleash vapid init --subject mailto:you@example.com` on your machine writes
+   `vapid.json` outside the repo and prints three values; set `PAYLEASH_VAPID_PUBLIC`, `PAYLEASH_VAPID_PRIVATE` and
+   `PAYLEASH_VAPID_SUBJECT` on Render. Then press *Get alerts* in the dashboard, on your phone, after installing it
+   (*Add to home screen*; it is a PWA).
+5. **Optional, email fallback:** `RESEND_API_KEY` and `NOTIFY_EMAIL_TO` send a link when no browser could be notified.
+
+The free tier sleeps after 15 minutes without traffic and has no disk: the demo's database is in memory and is re-seeded on every
+start (a *Reset the demo* button re-seeds it on demand). A production setup keeps the owner key on your own machine, uses the
+sandbox (not `--demo`), and puts the proxy on a host with a persistent disk.
 
 ### What the agent sees
 
@@ -191,8 +295,10 @@ Then run the real checks with `docs/SMOKE-TEST.md`. To fill your sandbox with de
   mandate limits or the ground-truth rules above.
 * Number-word matching is English only; an amount that is neither in PayPal's records nor spelled recognisably is treated
   as `unknown` and falls back to the mandate's limits and threshold.
-* The owner API is a bearer token over plain HTTP bound to `127.0.0.1`; put TLS and rate limiting in front of it before
-  exposing it. There is no mandate revocation list yet: freeze the agent or let the mandate expire.
+* The owner API is a bearer token over plain HTTP bound to `127.0.0.1`; put TLS in front of it before exposing it (Render
+  does). The dashboard login sets a signed, httpOnly, SameSite=Strict cookie (never the token itself), refuses cross-origin
+  writes and throttles failed logins, but there is no per-user accounts model and no rate limiting beyond that. There is no
+  mandate revocation list yet: freeze the agent or let the mandate expire.
 * One node, one SQLite file. The optional explanation model sees the decision facts (including emails) of held and denied
   calls: leave it unconfigured if that is not acceptable.
 
@@ -203,13 +309,17 @@ packages/core        mandate, policy, taint, audit, guard (the pipeline), PayPal
 packages/proxy       MCP server (stdio + streamable HTTP), approvals, owner API, binary `payleash-proxy`
 scripts/seed-sandbox sandbox demo data + offline 90-day history fixtures
 scripts/smoke        end-to-end smoke client for a running proxy
-apps/dashboard       placeholder
+packages/core/src/backtest   history, synthesised actions, dry-run replay, report, what-if
+apps/dashboard       React + Vite owner dashboard (served by the proxy), PWA
 apps/demo-agents     placeholder
+scripts/screenshots  Playwright: demo screenshots for this README and the PWA icons
+render.yaml          Render blueprint (free tier, demo mode)
 docs/SMOKE-TEST.md   what to run locally with sandbox keys
 examples/            an example mandate
 ```
 
-`pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test` are what CI runs.
+`pnpm build`, `pnpm build:dashboard`, `pnpm typecheck`, `pnpm lint`, `pnpm test` are what CI runs.
+`pnpm screenshots` regenerates `docs/screenshots` from the running demo (needs Chromium; `PLAYWRIGHT_BROWSERS_PATH` or `CHROMIUM_PATH`).
 
 ## License
 

@@ -10,10 +10,10 @@ PayPal sandbox:
 
 Everything here is sandbox. No real money moves. The proxy refuses to start against anything else.
 
-> Nothing in this file has been run against the live sandbox yet (the build session had no credentials). The same
-> sequence passes end to end against the built-in fixtures (`pnpm proxy --fixtures`), see "Dry run without keys" at
-> the bottom. The first real run is what this document is for: expect to adjust the seed step (section 3) if your
-> sandbox account cannot take card payments.
+> Status: the first live run against the real PayPal sandbox (2 Oct 2026) passed all six checks: the small refund was
+> COMPLETED at PayPal, the large refund was held, approved and COMPLETED, the injection was denied, the kill switch
+> worked and the audit verified. The same sequence also passes against the built-in fixtures (`pnpm proxy --fixtures`),
+> see "Dry run without keys" at the bottom. Sandbox orders paid by card carry no buyer email: see "Card-paid orders" below.
 
 ## 0. Prerequisites
 
@@ -157,7 +157,7 @@ rm /tmp/tampered.db
 
 ## 8. Optional: drive it from a real MCP client
 
-Claude Desktop (stdio) in `claude_desktop_config.json`, with absolute paths:
+A desktop MCP client (stdio): add a `mcpServers` entry to its config file, with absolute paths:
 
 ```json
 {
@@ -191,10 +191,55 @@ Any client that speaks streamable HTTP and can send a header works against `--tr
 | `mandate rejected: signature verification failed` | the mandate was signed with different keys than the proxy loads (`PAYLEASH_KEY_DIR`). Re-issue it. |
 | `listen EADDRINUSE` | another proxy is on that port: `--port 8788`, and `--url` for the smoke client. |
 | small refund is **held**, not run | the mandate has no `autoApproveThreshold`, or the amount is above it. Also: the refund amount must not exceed the capture. |
-| `payee_unverifiable` hold | PayPal's order response has no payer email (can happen for card payments). The injection check still denies on amount. |
+| `payee_unverifiable` hold | PayPal's order has no payer email (card payments in the sandbox). Only happens when the call names a payee. See "Card-paid orders" below. |
+| `ground_truth_unavailable` right after you changed the app's permissions | PayPal still hands out the old cached token. See "Permission changes do not apply". |
 | `ground_truth_unavailable` | PayPal could not be reached or the token was refused; PayLeash fails closed. Check credentials and network. |
 | large refund denied with `refund_exceeds_balance` | `CAPTURE_LARGE` is too small, or already partly refunded. Pick a capture of at least 70 USD. |
 | `daily_total_exceeded` | the mandate's 300 USD rolling total is used up; wait, or use a fresh database. |
+
+### Card-paid orders have no payer email
+
+Orders the seed script pays by card come back from PayPal with `payer: null`, even if you sent a payer email when you
+created them. PayLeash therefore cannot compare a named payee with "the original buyer". What that means:
+
+* **Refunds are fine.** PayPal always refunds the original payment source; there is no recipient to choose. A refund
+  that names no `payee_email` is judged on its amount, the capture's balance, the order age and the mandate limits only.
+* The payee check runs **only for tools that actually take a recipient** (today: `create_refund` with the optional
+  `payee_email`; invoice recipients have their own `recipient_not_on_invoice` check). `accept_dispute_claim`, `cancel_subscription` and the like never raise a payee reason.
+* If an agent *does* name a payee on such an order, the call is **held** (not denied) as `payee_unverifiable`: PayLeash
+  cannot prove the address wrong, so a human looks. The dashboard explains this on the held call, and a named payee
+  that conflicts with what PayPal shows is still denied. An injected `attacker@example.com` on a card order is
+  caught anyway by the amount check, the order balance and the taint rules.
+* To get orders with a buyer email, approve PayPal-wallet orders by hand (`pnpm seed -- --mode paypal`, see
+  `scripts/seed-sandbox/README.md`).
+
+### Permission changes do not apply (cached access token)
+
+PayPal caches **one access token per app for about 9 hours**. If you add a permission (for example *Transaction Search*
+or *Disputes*) to the REST app in the developer dashboard, requests keep using the old token and the new scope is
+missing until that token is gone. Symptoms: `403 NOT_AUTHORIZED` or `ground_truth_unavailable` for a call that should work now.
+
+```bash
+pnpm payleash paypal refresh-token     # needs PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET in the environment
+```
+
+It terminates the cached token (`POST /v1/oauth2/token/terminate`), fetches a new one and prints the scopes the new token
+carries (`<- new` marks the ones that were just added). Restart a running proxy afterwards: it holds the old token in memory
+until it expires. By hand:
+
+```bash
+curl -s -u "$PAYPAL_CLIENT_ID:$PAYPAL_CLIENT_SECRET" -d "token=$OLD_TOKEN&token_type_hint=ACCESS_TOKEN" \
+  https://api-m.sandbox.paypal.com/v1/oauth2/token/terminate -w '%{http_code}\n'
+```
+
+## Look at it in the dashboard
+
+With the proxy from step 4 still running, build the dashboard once (`pnpm build:dashboard`) and start the proxy with
+`--dashboard apps/dashboard/dist`, then open `http://127.0.0.1:8787` and sign in with `PAYLEASH_OWNER_TOKEN`. The held 60 USD
+refund shows up under **Approvals** (with *Buyer email unverifiable* instead of a plain hold if the order was paid by card
+and the call named a payee), the audit chain under **Audit**, and **Backtest** can replay the recorded history or, with the
+Transaction Search permission on your sandbox app, your own sandbox transactions (*Live sandbox*). If Transaction Search answers
+403 right after you added the permission, run `pnpm payleash paypal refresh-token` and restart the proxy (see above).
 
 ## Dry run without keys
 

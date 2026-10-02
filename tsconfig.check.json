@@ -15,7 +15,6 @@
     "packages/*/test",
     "scripts/*/src",
     "scripts/*/test",
-    "apps/*/src",
     "vitest.config.ts",
     "eslint.config.js"
   ]

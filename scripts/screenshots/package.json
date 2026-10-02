@@ -1,0 +1,15 @@
+{
+  "name": "@payleash/screenshots",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Starts the proxy in demo mode, drives the dashboard with Playwright and writes docs/screenshots/*.png (also the PWA icons)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/shots.ts",
+    "icons": "tsx src/icons.ts"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}

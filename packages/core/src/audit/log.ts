@@ -7,9 +7,10 @@ export const GENESIS_HASH = "0".repeat(64);
 /**
  * What happened. `allow | hold | deny` are the pipeline's decisions; the rest record what followed.
  * A call that was allowed gets a second entry (`executed` / `execution_failed`) carrying the PayPal result id.
- * `approve` / `reject` are owner decisions on held calls; `freeze` / `unfreeze` are kill-switch actions.
+ * `approve` / `reject` are owner decisions on held calls; `freeze` / `unfreeze` are kill-switch actions;
+ * `mandate_issued` is the owner signing a new mandate from the dashboard.
  */
-export type AuditDecision = "allow" | "hold" | "deny" | "approve" | "reject" | "executed" | "execution_failed" | "freeze" | "unfreeze";
+export type AuditDecision = "allow" | "hold" | "deny" | "approve" | "reject" | "executed" | "execution_failed" | "freeze" | "unfreeze" | "mandate_issued";
 
 export interface AuditEntryInput {
   agent: string;
@@ -80,6 +81,8 @@ const toEntry = (r: Row): AuditEntry => ({
   hash: r.hash,
 });
 
+const stripUndefined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+
 /** hash = SHA-256(canonical JSON of every field of the entry, including prevHash). */
 export function entryHash(e: Omit<AuditEntry, "hash">): string {
   return sha256Hex(
@@ -140,6 +143,25 @@ export class AuditLog {
         : this.db.prepare("SELECT * FROM audit_log ORDER BY seq DESC LIMIT ?").all(opts.limit ?? 1000)
     ) as Row[];
     return rows.reverse().map(toEntry);
+  }
+
+  /** Entries in ascending order: the next `limit` after `afterSeq`, or the last `limit` when no cursor is given. */
+  page(opts: { afterSeq?: number; limit?: number; agent?: string } = {}): AuditEntry[] {
+    const limit = Math.max(1, Math.min(opts.limit ?? 200, 5000));
+    const where = [opts.afterSeq !== undefined ? "seq > @after" : "", opts.agent ? "agent = @agent" : ""].filter(Boolean).join(" AND ");
+    const params = { after: opts.afterSeq, agent: opts.agent, limit };
+    if (opts.afterSeq !== undefined) {
+      return (this.db.prepare(`SELECT * FROM audit_log ${where ? `WHERE ${where}` : ""} ORDER BY seq ASC LIMIT @limit`).all(stripUndefined(params)) as Row[]).map(toEntry);
+    }
+    const rows = this.db.prepare(`SELECT * FROM audit_log ${where ? `WHERE ${where}` : ""} ORDER BY seq DESC LIMIT @limit`).all(stripUndefined(params)) as Row[];
+    return rows.reverse().map(toEntry);
+  }
+
+  /** Decisions per agent since an ISO timestamp (pipeline decisions only: allow, hold, deny). */
+  decisionCountsSince(sinceIso: string): { agent: string; decision: AuditDecision; n: number }[] {
+    return this.db
+      .prepare("SELECT agent, decision, COUNT(*) AS n FROM audit_log WHERE ts >= ? AND decision IN ('allow','hold','deny') GROUP BY agent, decision")
+      .all(sinceIso) as { agent: string; decision: AuditDecision; n: number }[];
   }
 
   head(): { seq: number; hash: string } {

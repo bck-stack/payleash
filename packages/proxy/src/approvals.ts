@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { canonicalize, type Db, type Reason } from "@payleash/core";
+import { canonicalize, type CallContext, type Db, type Reason } from "@payleash/core";
 
 export type ApprovalStatus = "pending" | "approving" | "executed" | "failed" | "denied" | "expired";
 
@@ -18,6 +18,8 @@ export interface Approval {
   decidedAtMs?: number;
   result?: unknown;
   error?: string;
+  /** Plain-language description and provenance map, captured when the call was held. */
+  context?: CallContext;
 }
 
 type Row = {
@@ -36,6 +38,7 @@ type Row = {
   decided_at_ms: number | null;
   result_json: string | null;
   error: string | null;
+  context_json?: string | null;
 };
 
 export function ensureApprovalSchema(db: Db): void {
@@ -59,6 +62,9 @@ export function ensureApprovalSchema(db: Db): void {
     );
     CREATE INDEX IF NOT EXISTS approvals_status ON approvals (status, created_at_ms);
   `);
+  // Added after the first release: older databases get the column on first start.
+  const cols = db.prepare("PRAGMA table_info(approvals)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "context_json")) db.exec("ALTER TABLE approvals ADD COLUMN context_json TEXT");
 }
 
 const toApproval = (r: Row): Approval => ({
@@ -76,6 +82,7 @@ const toApproval = (r: Row): Approval => ({
   decidedAtMs: r.decided_at_ms ?? undefined,
   result: r.result_json ? JSON.parse(r.result_json) : undefined,
   error: r.error ?? undefined,
+  context: r.context_json ? JSON.parse(r.context_json) : undefined,
 });
 
 export class ApprovalStore {
@@ -87,7 +94,7 @@ export class ApprovalStore {
   }
 
   /** Re-uses a still-pending approval for the identical call, so an agent retry loop does not flood the owner. */
-  createOrReuse(a: { agentId: string; tool: string; args: Record<string, unknown>; callHash: string; mandateToken: string; mandateId: string; reasons: Reason[]; explanation: string; ttlMs: number }): { approval: Approval; reused: boolean } {
+  createOrReuse(a: { agentId: string; tool: string; args: Record<string, unknown>; callHash: string; mandateToken: string; mandateId: string; reasons: Reason[]; explanation: string; ttlMs: number; context?: CallContext }): { approval: Approval; reused: boolean } {
     this.expireStale();
     const existing = this.db.prepare("SELECT * FROM approvals WHERE agent_id = ? AND call_hash = ? AND status = 'pending'").get(a.agentId, a.callHash) as Row | undefined;
     if (existing) return { approval: toApproval(existing), reused: true };
@@ -95,9 +102,9 @@ export class ApprovalStore {
     const t = this.now();
     this.db
       .prepare(
-        "INSERT INTO approvals (id, agent_id, tool, args_json, call_hash, mandate_token, mandate_id, reasons_json, explanation, status, created_at_ms, expires_at_ms) VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?)",
+        "INSERT INTO approvals (id, agent_id, tool, args_json, call_hash, mandate_token, mandate_id, reasons_json, explanation, status, created_at_ms, expires_at_ms, context_json) VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?,?)",
       )
-      .run(id, a.agentId, a.tool, canonicalize(a.args), a.callHash, a.mandateToken, a.mandateId, canonicalize(a.reasons), a.explanation, t, t + a.ttlMs);
+      .run(id, a.agentId, a.tool, canonicalize(a.args), a.callHash, a.mandateToken, a.mandateId, canonicalize(a.reasons), a.explanation, t, t + a.ttlMs, a.context ? canonicalize(a.context) : null);
     return { approval: this.get(id)!, reused: false };
   }
 

@@ -2,7 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DEMO_IDS, issueMandate, openDb, type MandateInput } from "@payleash/core";
-import { buildProxy, createMcpServer, type ProxyOverrides, type ProxyRuntime } from "../src/index.js";
+import { buildProxy, createMcpServer, type ProxyOptions, type ProxyOverrides, type ProxyRuntime } from "../src/index.js";
 
 export const I = DEMO_IDS;
 const owner = generateKeyPairSync("ed25519");
@@ -18,11 +18,11 @@ export const SUPPORT_MANDATE: MandateInput = {
   },
 };
 
-export const keys = { ownerPublic: owner.publicKey, stepUpPrivate: stepup.privateKey, stepUpPublic: stepup.publicKey };
+export const keys = { ownerPublic: owner.publicKey, ownerPrivate: owner.privateKey, stepUpPrivate: stepup.privateKey, stepUpPublic: stepup.publicKey };
 
-export function makeRuntime(env: NodeJS.ProcessEnv = {}, overrides: ProxyOverrides = {}): ProxyRuntime {
+export function makeRuntime(env: NodeJS.ProcessEnv = {}, overrides: ProxyOverrides = {}, opts: Partial<ProxyOptions> = {}): ProxyRuntime {
   return buildProxy(
-    { transport: "http", host: "127.0.0.1", port: 0, fixtures: true, allowLive: false },
+    { transport: "http", host: "127.0.0.1", port: 0, fixtures: true, allowLive: false, ...opts },
     { PAYLEASH_OWNER_TOKEN: "owner-token-0123456789abcdef", ...env },
     { db: openDb(":memory:"), keys, log: () => {}, ...overrides },
   );

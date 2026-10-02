@@ -1,4 +1,5 @@
 import type { Decision, Reason } from "../policy/types.js";
+import { groupReasons } from "../reasons.js";
 import type { ArgAssessment } from "./evaluate.js";
 
 /**
@@ -17,14 +18,17 @@ export interface Explainer {
 }
 
 export function templateExplanation(i: ExplainInput): string {
-  const first = i.reasons[0]?.message;
+  // One reason per code: a value reported twice is not a second reason.
+  const reasons = groupReasons(i.reasons);
+  const first = reasons[0]?.message;
+  const more = reasons.length > 1 ? ` (+${reasons.length - 1} more reason${reasons.length > 2 ? "s" : ""})` : "";
   switch (i.decision) {
     case "allow":
       return `Allowed: ${i.tool} is within the mandate and every critical value matches PayPal's records.`;
     case "hold":
-      return `Held for your approval: ${first ?? "a human must confirm this call"}${i.reasons.length > 1 ? ` (+${i.reasons.length - 1} more reason${i.reasons.length > 2 ? "s" : ""})` : ""}`;
+      return `Held for your approval: ${first ?? "a human must confirm this call"}${more}`;
     case "deny":
-      return `Denied: ${first ?? "the call violates the mandate"}${i.reasons.length > 1 ? ` (+${i.reasons.length - 1} more reason${i.reasons.length > 2 ? "s" : ""})` : ""}`;
+      return `Denied: ${first ?? "the call violates the mandate"}${more}`;
   }
 }
 
@@ -33,8 +37,13 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatOptions {
+  maxTokens?: number;
+  timeoutMs?: number;
+}
+
 export interface ChatClient {
-  complete(messages: ChatMessage[]): Promise<string>;
+  complete(messages: ChatMessage[], opts?: ChatOptions): Promise<string>;
 }
 
 export interface OpenAiCompatOptions {
@@ -49,14 +58,14 @@ export interface OpenAiCompatOptions {
 export class OpenAiCompatClient implements ChatClient {
   constructor(private readonly o: OpenAiCompatOptions) {}
 
-  async complete(messages: ChatMessage[]): Promise<string> {
+  async complete(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), this.o.timeoutMs ?? 5000);
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? this.o.timeoutMs ?? 5000);
     try {
       const res = await (this.o.fetch ?? fetch)(`${this.o.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.o.apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: this.o.model, messages, temperature: 0, max_tokens: 120 }),
+        body: JSON.stringify({ model: this.o.model, messages, temperature: 0, max_tokens: opts.maxTokens ?? 120 }),
         signal: ctrl.signal,
       });
       if (!res.ok) throw new Error(`LLM request failed with status ${res.status}`);
@@ -113,7 +122,7 @@ export class LlmExplainer implements Explainer {
     const facts = {
       tool: i.tool,
       decision: i.decision,
-      reasons: i.reasons.map((r) => ({ code: r.code, message: r.message.slice(0, 300) })),
+      reasons: groupReasons(i.reasons).map((r) => ({ code: r.code, count: r.count, message: r.message.slice(0, 300) })),
       arguments: i.args.map((a) => ({ name: a.path, value: a.value.slice(0, 60), status: a.status })),
     };
     try {
