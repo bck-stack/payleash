@@ -82,7 +82,7 @@ export function orderFixtures(s: OrderFixtureSpec): FixtureResponses {
           breakdown: { item_total: money(itemTotal), ...(s.shipping ? { shipping: money(s.shipping) } : {}) },
         },
         payee: { email_address: "merchant@example.com", merchant_id: "MERCHANTID123" },
-        items: items.map((i) => ({ name: i.name, quantity: String(i.qty), unit_price: money(i.unit) })),
+        items: items.map((i) => ({ name: i.name, quantity: String(i.qty), unit_amount: money(i.unit) })),
         payments: {
           captures: [capture],
           refunds: (s.refunds ?? []).map((r) => ({

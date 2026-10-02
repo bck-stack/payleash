@@ -59,7 +59,7 @@ export async function seedProducts(api: PayPalApi, st: SeedState, o: SeedOptions
 }
 
 function orderBody(order: PlannedOrder, mode: "card" | "paypal") {
-  const items = order.items.map((i) => ({ name: i.name.slice(0, 127), sku: i.sku, quantity: String(i.qty), unit_price: { currency_code: "USD", value: i.unit }, category: "PHYSICAL_GOODS" }));
+  const items = order.items.map((i) => ({ name: i.name.slice(0, 127), sku: i.sku, quantity: String(i.qty), unit_amount: { currency_code: "USD", value: i.unit }, category: "PHYSICAL_GOODS" }));
   return {
     intent: "CAPTURE",
     purchase_units: [

@@ -36,7 +36,7 @@ function unitFigures(unit: Json | undefined): KnownFigure[] {
     if (m && m.minor > 0) out.push({ label, money: m });
   }
   for (const item of (unit.items as Json[] | undefined) ?? []) {
-    const unit_price = asMoney(item.unit_price);
+    const unit_price = asMoney(item.unit_amount ?? item.unit_price);
     const qty = Number(item.quantity ?? 1);
     if (unit_price && Number.isInteger(qty) && qty > 0) {
       out.push({ label: `item "${String(item.name ?? "item").slice(0, 40)}"`, money: { currency: unit_price.currency, minor: unit_price.minor * qty } });
