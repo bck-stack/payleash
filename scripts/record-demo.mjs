@@ -78,6 +78,7 @@ const feed = (line) => {
 };
 const child = spawn("pnpm", ["--filter", "@payleash/demo-agents", "exec", "tsx", "src/index.ts", "--gate", "--approve", "dashboard", "--killswitch", "manual", "--pace", String(opt.pace), "--max-disputes", "2", "--port", String(PORT)], {
   cwd: ROOT,
+  shell: process.platform === "win32", // pnpm is a .cmd shim on Windows
   env: { ...process.env, PAYLEASH_OWNER_TOKEN: OWNER, PAYLEASH_QUIET: "1", NO_COLOR: "1", CF_ACCOUNT_ID: "", CF_API_TOKEN: "", LLM_BASE_URL: "", LLM_API_KEY: "" },
   stdio: ["pipe", "pipe", "inherit"],
 });
