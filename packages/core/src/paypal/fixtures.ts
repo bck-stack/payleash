@@ -41,9 +41,12 @@ export interface OrderFixtureSpec {
   /** The buyer's PayPal email, or null for a card-paid order: the real sandbox returns `payer: null` there. */
   buyer: string | null;
   total: string;
+  /** ISO 4217 code; USD when omitted. */
+  currency?: string;
   /** ISO timestamp of the capture. */
   createdAt: string;
-  refunds?: { id: string; value: string }[];
+  /** `createdAt` of a refund is its own timestamp; it defaults to the capture time. */
+  refunds?: { id: string; value: string; createdAt?: string }[];
   captureStatus?: string;
   items?: { name: string; unit: string; qty: number }[];
   shipping?: string;
@@ -52,6 +55,7 @@ export interface OrderFixtureSpec {
 /** Raw `/v2/payments/captures/:id` and `/v2/checkout/orders/:id` responses for one order spec. */
 export function orderFixtures(s: OrderFixtureSpec): FixtureResponses {
   const created = s.createdAt;
+  const money = (value: string, currency = s.currency ?? "USD") => ({ currency_code: currency, value });
   const refundedTotal = (s.refunds ?? []).reduce((a, r) => a + Number(r.value), 0);
   const status = s.captureStatus ?? (refundedTotal === 0 ? "COMPLETED" : refundedTotal >= Number(s.total) ? "REFUNDED" : "PARTIALLY_REFUNDED");
   const capture = {
@@ -93,7 +97,7 @@ export function orderFixtures(s: OrderFixtureSpec): FixtureResponses {
             id: r.id,
             status: "COMPLETED",
             amount: money(r.value),
-            create_time: created,
+            create_time: r.createdAt ?? created,
             links: [
               { href: `${API}/v2/payments/refunds/${r.id}`, rel: "self", method: "GET" },
               { href: `${API}/v2/payments/captures/${s.captureId}`, rel: "up", method: "GET" },

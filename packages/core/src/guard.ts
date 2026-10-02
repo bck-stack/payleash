@@ -5,7 +5,7 @@ import { MandateError, type Mandate, type ReplayGuard, type StepUpClaims, verify
 import { parseDecimal } from "./money.js";
 import type { PayPalReader } from "./paypal/types.js";
 import { evaluatePolicy, type Decision, type OperationFacts, type Reason, type Reservation, type SqlitePolicyStore } from "./policy/index.js";
-import { evaluateTaint, descriptorFor, templateExplanation, type ArgAssessment, type Explainer, type RegistryBook } from "./taint/index.js";
+import { evaluateTaint, descriptorFor, templateExplanation, type ArgAssessment, type Explainer, type RegistryBook, type TaintTruth } from "./taint/index.js";
 
 export interface GuardDeps {
   policy: SqlitePolicyStore;
@@ -41,6 +41,27 @@ export interface Authorization {
   facts: OperationFacts;
   /** Held budget for an allowed amount-bearing call. Pass the same object to `complete`. */
   reservation?: Reservation;
+  /** The firewall's and the policy's separate verdicts, before they were combined (the backtest re-runs the policy alone). */
+  parts?: { taint: Verdict; policy: Verdict };
+  /** PayPal's record the call was checked against (capture, order, ...), when one was read. */
+  truth?: TaintTruth | null;
+}
+
+export interface Verdict {
+  decision: Decision;
+  reasons: Reason[];
+}
+
+/**
+ * Deny beats hold beats allow. The firewall's payee message names the capture and buyer, so the policy's version of
+ * the same finding is dropped; identical reasons are reported once. Shared by the guard and the backtest's what-if.
+ */
+export function combineVerdicts(taint: Verdict, policy: Verdict): Verdict {
+  const policyReasons = policy.reasons.filter((r) => !(r.code === "payee_not_original_buyer" && taint.reasons.some((t) => t.code === r.code)));
+  const reasons = dedupe([...taint.reasons, ...policyReasons]);
+  const denied = taint.decision === "deny" || policy.decision === "deny";
+  const held = taint.decision === "hold" || policy.decision === "hold";
+  return { decision: denied ? "deny" : held ? "hold" : "allow", reasons };
 }
 
 /**
@@ -113,16 +134,12 @@ export class Guard {
     const taint = await evaluateTaint({ call, descriptor, reader: this.d.reader, registry: this.d.registries.forAgent(agentId) });
     const policy = evaluatePolicy(mandate, call, { ...policyCtx, facts: taint.facts });
 
-    // The firewall's payee message names the capture and buyer; do not repeat the policy's version of the same finding.
-    const policyReasons = policy.reasons.filter((r) => !(r.code === "payee_not_original_buyer" && taint.reasons.some((t) => t.code === r.code)));
-    const reasons = dedupe([...taint.reasons, ...policyReasons]);
-    const denied = taint.decision === "deny" || policy.decision === "deny";
-    const held = taint.decision === "hold" || policy.decision === "hold";
-    let decision: Decision = denied ? "deny" : held ? "hold" : "allow";
-    let finalReasons = reasons;
+    const combined = combineVerdicts(taint, policy);
+    let decision: Decision = combined.decision;
+    let finalReasons = combined.reasons;
     if (decision === "hold" && stepUp) {
       decision = "allow";
-      finalReasons = [...reasons, { code: "step_up_approved", message: `The owner approved this call (approval ${stepUp.approvalId}).` }];
+      finalReasons = [...finalReasons, { code: "step_up_approved", message: `The owner approved this call (approval ${stepUp.approvalId}).` }];
     }
 
     // 6. Reserve budget synchronously after the policy check (no await in between).
@@ -145,7 +162,7 @@ export class Guard {
       }
     }
 
-    return finish({ ...who, decision, reasons: finalReasons, stepUp, args: taint.args, facts: taint.facts, reservation });
+    return finish({ ...who, decision, reasons: finalReasons, stepUp, args: taint.args, facts: taint.facts, reservation, parts: { taint, policy }, truth: taint.truth });
   }
 
   /** Call after executing an allowed call: settles the budget and records the PayPal result in the audit log. */

@@ -10,3 +10,4 @@ export * from "./taint/index.js";
 export * from "./audit/index.js";
 export * from "./guard.js";
 export * from "./reasons.js";
+export * from "./backtest/index.js";

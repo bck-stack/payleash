@@ -5,6 +5,7 @@ import { AuditLog } from "./audit/index.js";
 import { openDb, resolveDbPath } from "./db.js";
 import { issueMandate, verifyMandate } from "./mandate/index.js";
 import { PayPalHttp, SANDBOX_BASE_URL, refreshAccessToken } from "./paypal/http.js";
+import { historyFromFiles, rerunPolicy, runBacktest, summarize } from "./backtest/index.js";
 import { SqlitePolicyStore } from "./policy/index.js";
 
 export interface CliIo {
@@ -34,6 +35,10 @@ const USAGE = `payleash <command>
 
   paypal refresh-token                              terminate PayPal's cached sandbox access token and fetch a new one
                                                    (needed after you change the app's permissions in the developer dashboard)
+
+  backtest --mandate F [--history F] [--disputes F] [--threshold X] [--json]
+                                                   replay a 90-day history through the guard (dry run) and print what would run,
+                                                   be held or be denied; --threshold re-runs the policy only with that auto-approve limit
 
   audit verify [--db PATH] [--head HASH]            recompute the audit hash chain; exit 1 if anything was tampered with
   audit head [--db PATH]                            print "seq hash" of the newest entry (record it elsewhere to detect truncation)
@@ -131,6 +136,31 @@ registerCommand("audit tail", async (args, io) => {
     io.out(`#${e.seq} ${e.ts} ${e.agent} ${e.tool} ${e.decision}${e.paypalResultId ? ` -> ${e.paypalResultId}` : ""}`);
   }
   return 0;
+});
+
+registerCommand("backtest", async (args, io) => {
+  const { values } = parseArgs({
+    args,
+    options: { mandate: { type: "string" }, history: { type: "string" }, disputes: { type: "string" }, threshold: { type: "string" }, json: { type: "boolean" } },
+  });
+  if (!values.mandate) throw new Error("--mandate FILE is required (the mandate JSON you would issue)");
+  const historyPath = values.history ?? "scripts/seed-sandbox/fixtures/backtest-history.json";
+  const disputesPath = values.disputes ?? "scripts/seed-sandbox/fixtures/disputes.json";
+  const history = historyFromFiles(JSON.parse(readFileSync(historyPath, "utf8")), JSON.parse(readFileSync(disputesPath, "utf8")));
+  const run = await runBacktest({ history, mandate: JSON.parse(readFileSync(values.mandate, "utf8")) });
+  const results = values.threshold ? rerunPolicy(run.results, run.mandate, { autoApproveThreshold: values.threshold }) : run.results;
+  const report = values.threshold ? summarize(results) : run.report;
+  if (values.json) {
+    io.out(JSON.stringify(report, null, 2));
+    return 0;
+  }
+  const t = report.totals;
+  io.out(`${t.actions} replayed actions${values.threshold ? ` (auto-approve threshold ${values.threshold})` : ""}: ${t.allow} automatic, ${t.hold} held, ${t.deny} denied`);
+  for (const [cur, m] of Object.entries(report.money)) io.out(`${cur}: ${m.allowed} moved automatically, ${m.held} held for approval, ${m.denied} blocked`);
+  io.out(`injection and attack cases caught: ${report.adversarial.caught}/${report.adversarial.total}${report.adversarial.missed.length ? `  MISSED: ${report.adversarial.missed.map((m) => m.id).join(", ")}` : ""}`);
+  io.out("rules that fired:");
+  for (const h of report.ruleHits) io.out(`  ${String(h.actions).padStart(3)}  ${h.code}`);
+  return report.adversarial.missed.length ? 1 : 0;
 });
 
 registerCommand("paypal refresh-token", async (_args, io) => {

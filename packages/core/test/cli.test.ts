@@ -1,5 +1,6 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseTtl, runCli, type CliIo } from "../src/index.js";
@@ -62,5 +63,19 @@ describe("cli", () => {
   it("prints usage for unknown commands", async () => {
     const r = io();
     expect(await runCli(["nope"], r.cliIo)).toBe(2);
+  });
+});
+
+describe("cli backtest", () => {
+  it("replays the committed history and re-runs the policy with another threshold", async () => {
+    const root = (p: string) => fileURLToPath(new URL(`../../../${p}`, import.meta.url));
+    const args = ["backtest", "--mandate", root("examples/mandate.support-agent.json"), "--history", root("scripts/seed-sandbox/fixtures/backtest-history.json"), "--disputes", root("scripts/seed-sandbox/fixtures/disputes.json")];
+    const a = io();
+    expect(await runCli(args, a.cliIo)).toBe(0);
+    expect(a.out.join("\n")).toMatch(/replayed actions: \d+ automatic, \d+ held, \d+ denied/);
+    expect(a.out.join("\n")).toMatch(/caught: (\d+)\/\1/);
+    const b = io();
+    expect(await runCli([...args, "--threshold", "100.00", "--json"], b.cliIo)).toBe(0);
+    expect(JSON.parse(b.out.join("")).totals.allow).toBeGreaterThan(0);
   });
 });
