@@ -1,4 +1,4 @@
-import { DEMO_IDS, buildDemoFixtures, type FixtureResponses } from "@payleash/core";
+import { buildDemoFixtures, type FixtureResponses } from "@payleash/core";
 import type { ToolExecutor } from "./executor.js";
 
 type Json = Record<string, any>;

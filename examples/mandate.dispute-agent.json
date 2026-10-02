@@ -1,0 +1,8 @@
+{
+  "agentId": "dispute-agent",
+  "allowedTools": ["list_disputes", "get_dispute", "get_order", "get_shipment_tracking", "provide_dispute_evidence", "accept_dispute_claim"],
+  "constraints": {
+    "provide_dispute_evidence": { "currency": "USD", "maxAmountPerOp": "500.00" },
+    "accept_dispute_claim": { "currency": "USD", "maxAmountPerOp": "100.00" }
+  }
+}

@@ -1,6 +1,19 @@
 {
   "name": "@payleash/demo-agents",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Placeholder: demo support / billing agents that talk to the PayLeash proxy. Built in a later session."
+  "description": "Demo agents that really transact through the PayLeash proxy: a support / refund agent and a dispute agent, scripted by default and LLM-driven when a model is configured",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.62",
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@payleash/core": "workspace:*",
+    "@payleash/proxy": "workspace:*",
+    "ai": "^7.0.127",
+    "zod": "^3.25.0"
+  }
 }

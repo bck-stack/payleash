@@ -11,3 +11,4 @@ dist/
 seed-output/
 *.pem
 coverage/
+apps/demo-agents/out/

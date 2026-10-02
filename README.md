@@ -311,7 +311,7 @@ scripts/seed-sandbox sandbox demo data + offline 90-day history fixtures
 scripts/smoke        end-to-end smoke client for a running proxy
 packages/core/src/backtest   history, synthesised actions, dry-run replay, report, what-if
 apps/dashboard       React + Vite owner dashboard (served by the proxy), PWA
-apps/demo-agents     placeholder
+apps/demo-agents     support + dispute agents that transact through the proxy (pnpm demo:agents)
 scripts/screenshots  Playwright: demo screenshots for this README and the PWA icons
 render.yaml          Render blueprint (free tier, demo mode)
 docs/SMOKE-TEST.md   what to run locally with sandbox keys
