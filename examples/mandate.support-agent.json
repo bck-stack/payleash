@@ -1,0 +1,16 @@
+{
+  "agentId": "support-agent",
+  "allowedTools": ["create_refund", "get_order", "get_dispute", "send_invoice", "cancel_subscription", "show_subscription_details"],
+  "constraints": {
+    "create_refund": {
+      "currency": "USD",
+      "maxAmountPerOp": "100.00",
+      "dailyTotal": "300.00",
+      "autoApproveThreshold": "25.00",
+      "payeeMustBeOriginalBuyer": true,
+      "orderAgeDays": 60
+    },
+    "send_invoice": { "currency": "USD", "maxAmountPerOp": "500.00", "autoApproveThreshold": "100.00" },
+    "cancel_subscription": {}
+  }
+}

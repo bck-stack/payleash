@@ -1,0 +1,15 @@
+{
+  "name": "@payleash/seed-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Creates PayPal sandbox demo data (products, orders, refunds, invoices) and the offline backtest history",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "history": "tsx src/index.ts --history"
+  },
+  "dependencies": {
+    "@payleash/core": "workspace:*"
+  }
+}

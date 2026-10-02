@@ -1,0 +1,14 @@
+{
+  "name": "@payleash/smoke",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end smoke test client for a running PayLeash proxy (sandbox or --fixtures)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0"
+  }
+}
