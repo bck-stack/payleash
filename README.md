@@ -14,7 +14,7 @@ support agent, a held refund, a dispute agent, the kill switch and the audit cha
 > engine, two demo agents, a hosted read-only demo and the video tooling are built and tested (320+ unit tests, browser tests with axe in CI).
 > The live run against the PayPal sandbox passed all six smoke checks (`docs/SMOKE-TEST.md`). Sandbox only.
 
-**Links:** [hosted demo](https://payleash-demo.onrender.com) (read-only login on the page) ·
+**Links:** [hosted demo](https://payleash-demo.onrender.com) (read-only login on the page) · [demo video](https://youtu.be/c8TTiwh95QY) ·
 [video script](docs/VIDEO-SCRIPT.md) · [Devpost text](docs/DEVPOST.md) · [security model](docs/SECURITY-MODEL.md) · [deploy on Render](docs/DEPLOY-RENDER.md)
 
 ## Try it in 2 minutes

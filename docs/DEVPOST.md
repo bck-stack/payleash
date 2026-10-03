@@ -1,11 +1,10 @@
 # Devpost submission: PayLeash
 
-Copy each section into the matching Devpost field. Replace the two placeholders before submitting:
-`https://youtu.be/c8TTiwh95QY` (your public YouTube link) and, if Render gave the service another name, the hosted demo address.
+Copy each section into the matching Devpost field.
 
-* **Hosted demo (judges):** https://payleash-demo.onrender.com — click **Enter the read-only demo** on the login page.  It resets itself every night.
+* **Hosted demo (judges):** https://payleash-demo.onrender.com — click **Enter the read-only demo** on the login page. It resets itself every night.
 * **Source code:** https://github.com/bck-stack/payleash (MIT)
-* **Video (2:45):** https://youtu.be/c8TTiwh95QY
+* **Video (2:12):** https://youtu.be/c8TTiwh95QY
 * **Track:** Best Use of Agentic Commerce · **Sponsor prize:** AG Grid
 
 ## Tagline
