@@ -3,7 +3,7 @@
 Copy each section into the matching Devpost field. Replace the two placeholders before submitting:
 `VIDEO_URL` (your public YouTube link) and, if Render gave the service another name, the hosted demo address.
 
-* **Hosted demo (judges):** https://payleash-demo.onrender.com — click **Enter the read-only demo** on the login page. The free host sleeps when idle: the first load can take about 30 seconds. It resets itself every night.
+* **Hosted demo (judges):** https://payleash-demo.onrender.com — click **Enter the read-only demo** on the login page.  It resets itself every night.
 * **Source code:** https://github.com/bck-stack/payleash (MIT)
 * **Video (2:45):** VIDEO_URL
 * **Track:** Best Use of Agentic Commerce · **Sponsor prize:** AG Grid
@@ -75,7 +75,7 @@ PayLeash's two data-heavy screens run on **AG Grid Community** (MIT, no enterpri
 
 ## Testing instructions for judges
 
-1. Open the hosted demo, click **Enter the read-only demo** (first load may take ~30 s).
+1. Open the hosted demo, click **Enter the read-only demo**.
 2. **Approvals:** five held calls wait. Open one: see the plain-language summary, where every value came from, why it was held. Approve or deny (demo data only).
 3. **Backtest → Run the backtest:** drag the auto-approve slider; look at the attack cases.
 4. **Audit:** sort, filter, open a row, see *Chain verified*.

@@ -14,7 +14,7 @@ support agent, a held refund, a dispute agent, the kill switch and the audit cha
 > engine, two demo agents, a hosted read-only demo and the video tooling are built and tested (320+ unit tests, browser tests with axe in CI).
 > The live run against the PayPal sandbox passed all six smoke checks (`docs/SMOKE-TEST.md`). Sandbox only.
 
-**Links:** [hosted demo](https://payleash-demo.onrender.com) (read-only login on the page; the free host sleeps, first load ~30 s) ·
+**Links:** [hosted demo](https://payleash-demo.onrender.com) (read-only login on the page) ·
 [video script](docs/VIDEO-SCRIPT.md) · [Devpost text](docs/DEVPOST.md) · [security model](docs/SECURITY-MODEL.md) · [deploy on Render](docs/DEPLOY-RENDER.md)
 
 ## Try it in 2 minutes
@@ -258,7 +258,7 @@ in that path and no network use: a test stubs `fetch` to throw and the replay st
 
 `render.yaml` defines one free web service that runs `payleash-proxy --demo` with the dashboard: recorded PayPal, throw-away keys, a read-only
 demo login on the login page, a nightly reset, `/healthz`, and no way to reach PayPal. Exact steps, environment variables, how to keep the free
-service awake and the uptime check: **[docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md)**. The free tier sleeps after 15 minutes: the login page says the first load may take about 30 seconds.
+service awake and the uptime check: **[docs/DEPLOY-RENDER.md](docs/DEPLOY-RENDER.md)**. The free tier sleeps after 15 minutes without traffic; a Cloudflare cron pings `/healthz` every 10 minutes so it stays awake (the GitHub workflow is a backup: scheduled GitHub runs are often delayed by hours).
 
 ### What the agent sees
 
